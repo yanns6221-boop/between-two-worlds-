@@ -1,1665 +1,871 @@
+
 import pygame
 import os
 import sys
-import math
 import json
 
 pygame.init()
 
-# ============================================================
-# CONFIGURAÇÕES
-# ============================================================
-
 LARGURA = 960
 ALTURA = 640
 FPS = 60
-
-VELOCIDADE = 2.8
-
-ESCALA_MAPA = 1.35
-
-# Tamanho de cada bloco usado no editor.
-# Menor = colisões mais precisas.
+VELOCIDADE = 1.8
+VELOCIDADE_CORRIDA = 4.5
+ESCALA_MAPA = 1.80
 TAMANHO_CELULA = 12
+LARGURA_PERSONAGEM = 48
+ALTURA_PERSONAGEM = 72
+HITBOX_LARGURA = 24
+HITBOX_ALTURA = 27
+INTERVALO_ANIMACAO = 120
 
-
-# ============================================================
-# JANELA
-# ============================================================
-
-TELA = pygame.display.set_mode(
-    (LARGURA, ALTURA)
-)
-
-pygame.display.set_caption(
-    "Between Two Worlds"
-)
-
+TELA = pygame.display.set_mode((LARGURA, ALTURA))
+pygame.display.set_caption("Between Two Worlds")
 RELOGIO = pygame.time.Clock()
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ASSETS_DIR = os.path.join(BASE_DIR, "assets")
+ARQUIVO_COLISAO = os.path.join(BASE_DIR, "collision_map.json")
+ARQUIVO_PORTAS = os.path.join(BASE_DIR, "doors.json")
 
-# ============================================================
-# PASTAS
-# ============================================================
+BRANCO = (240, 240, 240)
+VERMELHO = (255, 70, 70)
+VERDE = (90, 230, 120)
+AMARELO = (255, 220, 70)
+MARROM = (115, 65, 35)
+PRETO = (0, 0, 0)
 
-BASE_DIR = os.path.dirname(
-    os.path.abspath(__file__)
-)
-
-ASSETS_DIR = os.path.join(
-    BASE_DIR,
-    "assets"
-)
-
-ARQUIVO_COLISAO = os.path.join(
-    BASE_DIR,
-    "collision_map.json"
-)
-
-
-# ============================================================
-# CARREGAR IMAGEM
-# ============================================================
+def sair_com_erro(mensagem):
+    print(mensagem)
+    pygame.quit()
+    sys.exit()
 
 def carregar_imagem(caminho, alpha=True):
-
     try:
-
         imagem = pygame.image.load(caminho)
 
         if alpha:
+            return imagem.convert_alpha()
 
-            imagem = imagem.convert_alpha()
-
-        else:
-
-            imagem = imagem.convert()
-
-        return imagem
+        return imagem.convert()
 
     except Exception as erro:
-
-        print()
-        print("Erro ao carregar imagem:")
-        print(caminho)
+        print("Erro ao carregar imagem:", caminho)
         print(erro)
-
         return None
-
-
-# ============================================================
-# ENCONTRAR MAPA
-# ============================================================
 
 def encontrar_mapa():
-
-    if not os.path.exists(ASSETS_DIR):
-
+    if not os.path.isdir(ASSETS_DIR):
         return None
-
-
-    arquivos = os.listdir(
-        ASSETS_DIR
-    )
 
     candidatos = []
+    extensoes = [".png", ".jpg", ".jpeg", ".bmp", ".webp"]
+    ignorar = [
+        "player.png",
+        "player_back.png",
+        "player_sheet.png"
+    ]
 
-
-    for arquivo in arquivos:
-
-        caminho = os.path.join(
-            ASSETS_DIR,
-            arquivo
-        )
-
+    for nome in os.listdir(ASSETS_DIR):
+        caminho = os.path.join(ASSETS_DIR, nome)
 
         if not os.path.isfile(caminho):
-
             continue
 
-
-        extensao = os.path.splitext(
-            arquivo
-        )[1].lower()
-
-
-        if extensao not in [
-            ".png",
-            ".jpg",
-            ".jpeg",
-            ".bmp",
-            ".webp"
-        ]:
-
+        if os.path.splitext(nome)[1].lower() not in extensoes:
             continue
 
-
-        nome = arquivo.lower()
-
-
-        if nome in [
-            "player.png",
-            "player_sheet.png"
-        ]:
-
+        if nome.lower() in ignorar:
             continue
-
 
         try:
-
-            imagem = pygame.image.load(
-                caminho
-            )
-
-            largura = imagem.get_width()
-            altura = imagem.get_height()
-
-            area = largura * altura
-
+            imagem = pygame.image.load(caminho)
+            area = imagem.get_width() * imagem.get_height()
 
             if area > 200000:
+                candidatos.append((area, caminho))
 
-                candidatos.append(
-                    (
-                        area,
-                        caminho
-                    )
-                )
-
-
-        except:
-
+        except Exception:
             pass
 
-
     if not candidatos:
-
         return None
 
-
-    candidatos.sort(
-        reverse=True
-    )
-
-
+    candidatos.sort(reverse=True)
     return candidatos[0][1]
-
-
-# ============================================================
-# MAPA
-# ============================================================
 
 CAMINHO_MAPA = encontrar_mapa()
 
-
 if CAMINHO_MAPA is None:
+    sair_com_erro(
+        "ERRO: não encontrei uma imagem de mapa dentro da pasta assets."
+    )
 
-    print()
-    print("ERRO: não encontrei o mapa dentro de assets.")
-    print()
-
-    pygame.quit()
-    sys.exit()
-
-
-print()
-print("Mapa utilizado:")
-print(CAMINHO_MAPA)
-print()
-
-
-MAPA_ORIGINAL = carregar_imagem(
-    CAMINHO_MAPA,
-    False
-)
-
+MAPA_ORIGINAL = carregar_imagem(CAMINHO_MAPA, False)
 
 if MAPA_ORIGINAL is None:
+    sair_com_erro("ERRO: não consegui abrir a imagem do mapa.")
 
-    pygame.quit()
-    sys.exit()
+MAPA_LARGURA_ORIGINAL = MAPA_ORIGINAL.get_width()
+MAPA_ALTURA_ORIGINAL = MAPA_ORIGINAL.get_height()
 
+MAPA_LARGURA = int(MAPA_LARGURA_ORIGINAL * ESCALA_MAPA)
+MAPA_ALTURA = int(MAPA_ALTURA_ORIGINAL * ESCALA_MAPA)
 
-MAPA_ORIGINAL_LARGURA = (
-    MAPA_ORIGINAL.get_width()
-)
-
-MAPA_ORIGINAL_ALTURA = (
-    MAPA_ORIGINAL.get_height()
-)
-
-
-MAPA_LARGURA = int(
-    MAPA_ORIGINAL_LARGURA *
-    ESCALA_MAPA
-)
-
-MAPA_ALTURA = int(
-    MAPA_ORIGINAL_ALTURA *
-    ESCALA_MAPA
-)
-
-
-MAPA = pygame.transform.smoothscale(
+MAPA = pygame.transform.scale(
     MAPA_ORIGINAL,
-    (
-        MAPA_LARGURA,
-        MAPA_ALTURA
-    )
+    (MAPA_LARGURA, MAPA_ALTURA)
 )
 
+print("Mapa utilizado:", CAMINHO_MAPA)
+print("Tamanho do mapa:", MAPA_LARGURA, "x", MAPA_ALTURA)
 
-# ============================================================
-# PLAYER
-# ============================================================
+def carregar_sheet(nome):
+    caminho = os.path.join(ASSETS_DIR, nome)
+    imagem = carregar_imagem(caminho, True)
 
-CAMINHO_PLAYER = os.path.join(
-    ASSETS_DIR,
-    "player.png"
-)
-
-
-PLAYER_SHEET = carregar_imagem(
-    CAMINHO_PLAYER,
-    True
-)
-
-
-if PLAYER_SHEET is None:
-
-    print(
-        "ERRO: player.png não encontrado."
-    )
-
-    pygame.quit()
-    sys.exit()
-
-
-SHEET_LARGURA = (
-    PLAYER_SHEET.get_width()
-)
-
-SHEET_ALTURA = (
-    PLAYER_SHEET.get_height()
-)
-
-
-NUM_FRAMES = 2
-
-FRAME_LARGURA = (
-    SHEET_LARGURA //
-    NUM_FRAMES
-)
-
-FRAME_ALTURA = SHEET_ALTURA
-
-
-def criar_frame(numero):
-
-    frame = pygame.Surface(
-        (
-            FRAME_LARGURA,
-            FRAME_ALTURA
-        ),
-        pygame.SRCALPHA
-    )
-
-
-    frame.blit(
-        PLAYER_SHEET,
-        (0, 0),
-        (
-            numero * FRAME_LARGURA,
-            0,
-            FRAME_LARGURA,
-            FRAME_ALTURA
+    if imagem is None:
+        sair_com_erro(
+            "ERRO: não encontrei " + nome + " dentro da pasta assets."
         )
-    )
 
+    return imagem
 
-    frame = pygame.transform.scale(
-        frame,
-        (52, 78)
-    )
+PLAYER_SHEET = carregar_sheet("player.png")
+PLAYER_BACK_SHEET = carregar_sheet("player_back.png")
 
+def cortar_frames_horizontais(
+    sheet,
+    quantidade,
+    largura_final=48,
+    altura_final=72
+):
+    frames = []
+    largura = sheet.get_width()
+    altura = sheet.get_height()
+    largura_frame = largura // quantidade
 
-    return frame
+    for i in range(quantidade):
+        recorte = pygame.Surface(
+            (largura_frame, altura),
+            pygame.SRCALPHA
+        )
 
+        recorte.blit(
+            sheet,
+            (0, 0),
+            (i * largura_frame, 0, largura_frame, altura)
+        )
 
-FRAME_0 = criar_frame(0)
-FRAME_1 = criar_frame(1)
+        frames.append(
+            pygame.transform.scale(
+                recorte,
+                (largura_final, altura_final)
+            )
+        )
 
+    return frames
 
-# ============================================================
-# DIREÇÕES
-# ============================================================
+def separar_costas(sheet):
+    largura = sheet.get_width()
+    altura = sheet.get_height()
+    colunas = []
+
+    for x in range(largura):
+        tem_pixel = False
+
+        for y in range(altura):
+            if sheet.get_at((x, y)).a > 10:
+                tem_pixel = True
+                break
+
+        colunas.append(tem_pixel)
+
+    grupos = []
+    inicio = None
+
+    for x in range(largura):
+        if colunas[x]:
+            if inicio is None:
+                inicio = x
+
+        elif inicio is not None:
+            fim = x - 1
+
+            if fim - inicio >= 3:
+                grupos.append((inicio, fim))
+
+            inicio = None
+
+    if inicio is not None:
+        grupos.append((inicio, largura - 1))
+
+    if len(grupos) < 4:
+        print("Aviso: não identifiquei quatro sprites de costas.")
+        print("Usando os sprites da frente como alternativa.")
+
+        frente = cortar_frames_horizontais(PLAYER_SHEET, 2)
+        return [frente[0], frente[1], frente[0], frente[1]]
+
+    frames = []
+
+    for inicio, fim in grupos[:4]:
+        topo = altura
+        fundo = 0
+
+        for x in range(inicio, fim + 1):
+            for y in range(altura):
+                if sheet.get_at((x, y)).a > 10:
+                    topo = min(topo, y)
+                    fundo = max(fundo, y)
+
+        largura_recorte = fim - inicio + 1
+        altura_recorte = max(1, fundo - topo + 1)
+
+        recorte = pygame.Surface(
+            (largura_recorte, altura_recorte),
+            pygame.SRCALPHA
+        )
+
+        recorte.blit(
+            sheet,
+            (0, 0),
+            (inicio, topo, largura_recorte, altura_recorte)
+        )
+
+        escala = min(
+            44 / largura_recorte,
+            68 / altura_recorte
+        )
+
+        nova_largura = max(1, int(largura_recorte * escala))
+        nova_altura = max(1, int(altura_recorte * escala))
+
+        recorte = pygame.transform.scale(
+            recorte,
+            (nova_largura, nova_altura)
+        )
+
+        frame = pygame.Surface((48, 72), pygame.SRCALPHA)
+
+        frame.blit(
+            recorte,
+            (
+                (48 - nova_largura) // 2,
+                72 - nova_altura
+            )
+        )
+
+        frames.append(frame)
+
+    print("Sprites de costas identificados:", len(frames))
+    return frames
+
+FRAMES_FRENTE = cortar_frames_horizontais(PLAYER_SHEET, 2)
+FRAMES_COSTAS = separar_costas(PLAYER_BACK_SHEET)
 
 FRENTE = 0
 COSTAS = 1
 ESQUERDA = 2
 DIREITA = 3
 
-
-# ============================================================
-# COLISÕES
-# ============================================================
-
-# As colisões agora são armazenadas como células.
-#
-# Exemplo:
-#
-# "10,15"
-#
-# significa que existe uma célula bloqueada
-# na posição X=10, Y=15 do mapa original.
-
-
 celulas_colisao = set()
+portas = []
 
+def tamanho_celula_mundo():
+    return TAMANHO_CELULA * ESCALA_MAPA
 
-# ============================================================
-# CARREGAR COLISÕES
-# ============================================================
+def celula_valida(cx, cy):
+    tamanho = tamanho_celula_mundo()
 
-def carregar_colisoes():
-
-    global celulas_colisao
-
-
-    if not os.path.exists(
-        ARQUIVO_COLISAO
-    ):
-
-        print(
-            "Nenhum mapa de colisão encontrado."
-        )
-
-        celulas_colisao = set()
-
-        return
-
-
-    try:
-
-        with open(
-            ARQUIVO_COLISAO,
-            "r",
-            encoding="utf-8"
-        ) as arquivo:
-
-            dados = json.load(
-                arquivo
-            )
-
-
-        celulas_colisao = set()
-
-
-        for item in dados:
-
-            if (
-                isinstance(item, list)
-                and len(item) == 2
-            ):
-
-                x = int(item[0])
-                y = int(item[1])
-
-                celulas_colisao.add(
-                    (x, y)
-                )
-
-
-        print(
-            "Colisões carregadas:",
-            len(celulas_colisao)
-        )
-
-
-    except Exception as erro:
-
-        print(
-            "Erro ao carregar colisões:",
-            erro
-        )
-
-        celulas_colisao = set()
-
-
-# ============================================================
-# SALVAR COLISÕES
-# ============================================================
-
-def salvar_colisoes():
-
-    dados = []
-
-
-    for x, y in sorted(
-        celulas_colisao
-    ):
-
-        dados.append(
-            [x, y]
-        )
-
-
-    try:
-
-        with open(
-            ARQUIVO_COLISAO,
-            "w",
-            encoding="utf-8"
-        ) as arquivo:
-
-            json.dump(
-                dados,
-                arquivo,
-                indent=4
-            )
-
-
-        print()
-        print(
-            "Mapa de colisão salvo!"
-        )
-
-        print(
-            "Total de células:",
-            len(dados)
-        )
-
-        print()
-
-
-    except Exception as erro:
-
-        print(
-            "Erro ao salvar colisões:",
-            erro
-        )
-
-
-# ============================================================
-# CONVERTER CÉLULA PARA RETÂNGULO
-# ============================================================
+    return (
+        cx >= 0
+        and cy >= 0
+        and cx * tamanho < MAPA_LARGURA
+        and cy * tamanho < MAPA_ALTURA
+    )
 
 def celula_para_rect(cx, cy):
-
-    x = int(
-        cx *
-        TAMANHO_CELULA *
-        ESCALA_MAPA
-    )
-
-    y = int(
-        cy *
-        TAMANHO_CELULA *
-        ESCALA_MAPA
-    )
-
-    largura = int(
-        TAMANHO_CELULA *
-        ESCALA_MAPA
-    ) + 1
-
-    altura = int(
-        TAMANHO_CELULA *
-        ESCALA_MAPA
-    ) + 1
-
+    tamanho = tamanho_celula_mundo()
 
     return pygame.Rect(
-        x,
-        y,
-        largura,
-        altura
+        int(cx * tamanho),
+        int(cy * tamanho),
+        int(tamanho) + 1,
+        int(tamanho) + 1
     )
 
+def mouse_para_celula(mx, my, camera_x, camera_y):
+    mundo_x = mx + camera_x
+    mundo_y = my + camera_y
+    tamanho = tamanho_celula_mundo()
 
-# ============================================================
-# CONVERTER MOUSE PARA CÉLULA
-# ============================================================
-
-def mouse_para_celula(
-    mouse_x,
-    mouse_y,
-    camera_x,
-    camera_y
-):
-
-    # posição do mouse no mundo
-    mundo_x = (
-        mouse_x +
-        camera_x
+    return (
+        int(mundo_x // tamanho),
+        int(mundo_y // tamanho)
     )
 
-    mundo_y = (
-        mouse_y +
-        camera_y
+def carregar_colisoes():
+    global celulas_colisao
+    celulas_colisao = set()
+
+    if not os.path.exists(ARQUIVO_COLISAO):
+        print("Nenhum mapa de colisão encontrado.")
+        return
+
+    try:
+        with open(ARQUIVO_COLISAO, "r", encoding="utf-8") as arquivo:
+            dados = json.load(arquivo)
+
+        for item in dados:
+            if isinstance(item, list) and len(item) == 2:
+                celulas_colisao.add((int(item[0]), int(item[1])))
+
+        print("Colisões carregadas:", len(celulas_colisao))
+
+    except Exception as erro:
+        print("Erro ao carregar colisões:", erro)
+
+def salvar_colisoes():
+    dados = [[x, y] for x, y in sorted(celulas_colisao)]
+
+    try:
+        with open(ARQUIVO_COLISAO, "w", encoding="utf-8") as arquivo:
+            json.dump(dados, arquivo, indent=4)
+
+        print("Colisões salvas:", len(dados))
+
+    except Exception as erro:
+        print("Erro ao salvar colisões:", erro)
+
+def carregar_portas():
+    global portas
+    portas = []
+
+    if not os.path.exists(ARQUIVO_PORTAS):
+        print("Nenhum arquivo de portas encontrado.")
+        return
+
+    try:
+        with open(ARQUIVO_PORTAS, "r", encoding="utf-8") as arquivo:
+            dados = json.load(arquivo)
+
+        for item in dados:
+            if not isinstance(item, dict):
+                continue
+
+            if "x" not in item or "y" not in item:
+                continue
+
+            cx = int(item["x"])
+            cy = int(item["y"])
+
+            if not celula_valida(cx, cy):
+                continue
+
+            portas.append({
+                "x": cx,
+                "y": cy,
+                "aberta": bool(item.get("aberta", False))
+            })
+
+        print("Portas carregadas:", len(portas))
+
+    except Exception as erro:
+        print("Erro ao carregar portas:", erro)
+
+def salvar_portas():
+    dados = []
+
+    for porta in portas:
+        dados.append({
+            "x": porta["x"],
+            "y": porta["y"],
+            "aberta": porta["aberta"]
+        })
+
+    try:
+        with open(ARQUIVO_PORTAS, "w", encoding="utf-8") as arquivo:
+            json.dump(dados, arquivo, indent=4)
+
+        print("Portas salvas:", len(portas))
+
+    except Exception as erro:
+        print("Erro ao salvar portas:", erro)
+
+def porta_na_celula(cx, cy):
+    for porta in portas:
+        if porta["x"] == cx and porta["y"] == cy:
+            return porta
+
+    return None
+
+def hitbox_porta(porta):
+    return celula_para_rect(porta["x"], porta["y"])
+
+def hitbox_player(x=None, y=None):
+    if x is None:
+        x = player_x
+
+    if y is None:
+        y = player_y
+
+    return pygame.Rect(
+        int(x),
+        int(y),
+        HITBOX_LARGURA,
+        HITBOX_ALTURA
     )
 
-
-    # volta para escala original
-    original_x = (
-        mundo_x /
-        ESCALA_MAPA
+def dentro_do_mapa(rect):
+    return (
+        rect.left >= 0
+        and rect.top >= 0
+        and rect.right <= MAPA_LARGURA
+        and rect.bottom <= MAPA_ALTURA
     )
 
-    original_y = (
-        mundo_y /
-        ESCALA_MAPA
-    )
+def colide_com_mapa(rect):
+    if not dentro_do_mapa(rect):
+        return True
 
+    tamanho = tamanho_celula_mundo()
 
-    cx = int(
-        original_x //
-        TAMANHO_CELULA
-    )
+    cx_inicio = max(0, int(rect.left // tamanho))
+    cy_inicio = max(0, int(rect.top // tamanho))
+    cx_fim = int(rect.right // tamanho)
+    cy_fim = int(rect.bottom // tamanho)
 
-    cy = int(
-        original_y //
-        TAMANHO_CELULA
-    )
+    for cx in range(cx_inicio, cx_fim + 1):
+        for cy in range(cy_inicio, cy_fim + 1):
+            if (cx, cy) not in celulas_colisao:
+                continue
 
+            obstaculo = celula_para_rect(cx, cy)
 
-    return cx, cy
+            if rect.colliderect(obstaculo):
+                return True
 
+    for porta in portas:
+        if porta["aberta"]:
+            continue
 
-# ============================================================
-# RETÂNGULOS DE COLISÃO DO JOGO
-# ============================================================
+        if rect.colliderect(hitbox_porta(porta)):
+            return True
 
-def obter_colisoes():
+    return False
 
-    resultado = []
+def encontrar_posicao_inicial():
+    passo = max(8, int(tamanho_celula_mundo()))
 
-
-    for cx, cy in celulas_colisao:
-
-        resultado.append(
-            celula_para_rect(
-                cx,
-                cy
-            )
+    centro_x = max(
+        0,
+        min(
+            MAPA_LARGURA - HITBOX_LARGURA,
+            MAPA_LARGURA // 2 - HITBOX_LARGURA // 2
         )
+    )
 
-
-    return resultado
-
-
-# ============================================================
-# PLAYER
-# ============================================================
-
-class Player:
-
-    def __init__(self):
-
-        self.x = (
-            450 *
-            ESCALA_MAPA
+    centro_y = max(
+        0,
+        min(
+            MAPA_ALTURA - HITBOX_ALTURA,
+            MAPA_ALTURA // 2 - HITBOX_ALTURA // 2
         )
+    )
 
-        self.y = (
-            280 *
-            ESCALA_MAPA
-        )
+    max_raio = max(MAPA_LARGURA, MAPA_ALTURA) // passo + 2
 
+    for raio in range(max_raio):
+        candidatos = []
 
-        # Hitbox apenas dos pés
-        self.largura = 26
-        self.altura = 30
-
-
-        self.rect = pygame.Rect(
-            int(self.x),
-            int(self.y),
-            self.largura,
-            self.altura
-        )
-
-
-        self.vel_x = 0
-        self.vel_y = 0
-
-
-        self.direcao = FRENTE
-
-
-        self.frame = 0
-
-        self.tempo_animacao = 0
-
-        self.andando = False
-
-
-    # --------------------------------------------------------
-    # RECT
-    # --------------------------------------------------------
-
-    def atualizar_rect(self):
-
-        self.rect.x = int(
-            self.x
-        )
-
-        self.rect.y = int(
-            self.y
-        )
-
-
-    # --------------------------------------------------------
-    # ANIMAÇÃO
-    # --------------------------------------------------------
-
-    def atualizar_animacao(
-        self,
-        dt
-    ):
-
-        if not self.andando:
-
-            self.frame = 0
-
-            self.tempo_animacao = 0
-
-            return
-
-
-        self.tempo_animacao += dt
-
-
-        if self.tempo_animacao >= 130:
-
-            self.tempo_animacao = 0
-
-            self.frame += 1
-
-
-            if self.frame >= 2:
-
-                self.frame = 0
-
-
-    # --------------------------------------------------------
-    # IMAGEM
-    # --------------------------------------------------------
-
-    def obter_imagem(self):
-
-        if self.direcao == COSTAS:
-
-            imagem = FRAME_0
-
+        if raio == 0:
+            candidatos.append((centro_x, centro_y))
         else:
+            deslocamento = raio * passo
 
-            if self.frame == 1:
-
-                imagem = FRAME_1
-
-            else:
-
-                imagem = FRAME_0
-
-
-        if self.direcao == ESQUERDA:
-
-            imagem = pygame.transform.flip(
-                imagem,
-                True,
-                False
-            )
-
-
-        return imagem
-
-
-    # --------------------------------------------------------
-    # MOVIMENTO HORIZONTAL
-    # --------------------------------------------------------
-
-    def mover_horizontal(
-        self,
-        quantidade,
-        colisoes
-    ):
-
-        self.x += quantidade
-
-        self.atualizar_rect()
-
-
-        for obstaculo in colisoes:
-
-            if self.rect.colliderect(
-                obstaculo
-            ):
-
-                if quantidade > 0:
-
-                    self.rect.right = (
-                        obstaculo.left
-                    )
-
-                elif quantidade < 0:
-
-                    self.rect.left = (
-                        obstaculo.right
-                    )
-
-
-                self.x = self.rect.x
-
-
-    # --------------------------------------------------------
-    # MOVIMENTO VERTICAL
-    # --------------------------------------------------------
-
-    def mover_vertical(
-        self,
-        quantidade,
-        colisoes
-    ):
-
-        self.y += quantidade
-
-        self.atualizar_rect()
-
-
-        for obstaculo in colisoes:
-
-            if self.rect.colliderect(
-                obstaculo
-            ):
-
-                if quantidade > 0:
-
-                    self.rect.bottom = (
-                        obstaculo.top
-                    )
-
-                elif quantidade < 0:
-
-                    self.rect.top = (
-                        obstaculo.bottom
-                    )
-
-
-                self.y = self.rect.y
-
-
-    # --------------------------------------------------------
-    # MOVIMENTO COM COLISÃO
-    # --------------------------------------------------------
-
-    def mover_com_colisao(
-        self,
-        dx,
-        dy,
-        colisoes
-    ):
-
-        distancia = math.sqrt(
-            dx * dx +
-            dy * dy
-        )
-
-
-        passos = max(
-            1,
-            math.ceil(
-                distancia / 1.5
-            )
-        )
-
-
-        passo_x = (
-            dx /
-            passos
-        )
-
-        passo_y = (
-            dy /
-            passos
-        )
-
-
-        for _ in range(passos):
-
-            if passo_x != 0:
-
-                self.mover_horizontal(
-                    passo_x,
-                    colisoes
+            for offset in range(-deslocamento, deslocamento + 1, passo):
+                candidatos.append(
+                    (centro_x + offset, centro_y - deslocamento)
+                )
+                candidatos.append(
+                    (centro_x + offset, centro_y + deslocamento)
+                )
+                candidatos.append(
+                    (centro_x - deslocamento, centro_y + offset)
+                )
+                candidatos.append(
+                    (centro_x + deslocamento, centro_y + offset)
                 )
 
+        for x, y in candidatos:
+            x = max(0, min(MAPA_LARGURA - HITBOX_LARGURA, x))
+            y = max(0, min(MAPA_ALTURA - HITBOX_ALTURA, y))
 
-            if passo_y != 0:
-
-                self.mover_vertical(
-                    passo_y,
-                    colisoes
-                )
-
-
-    # --------------------------------------------------------
-    # LIMITAR AO MAPA
-    # --------------------------------------------------------
-
-    def limitar_ao_mapa(self):
-
-        if self.rect.left < 0:
-
-            self.rect.left = 0
-
-            self.x = self.rect.x
-
-
-        if self.rect.top < 0:
-
-            self.rect.top = 0
-
-            self.y = self.rect.y
-
-
-        if self.rect.right > MAPA_LARGURA:
-
-            self.rect.right = (
-                MAPA_LARGURA
+            teste = pygame.Rect(
+                int(x),
+                int(y),
+                HITBOX_LARGURA,
+                HITBOX_ALTURA
             )
 
-            self.x = self.rect.x
+            if not colide_com_mapa(teste):
+                return x, y
 
+    return 0, 0
 
-        if self.rect.bottom > MAPA_ALTURA:
+carregar_colisoes()
+carregar_portas()
 
-            self.rect.bottom = (
-                MAPA_ALTURA
-            )
+player_x, player_y = encontrar_posicao_inicial()
 
-            self.y = self.rect.y
+print("Posição inicial:", int(player_x), int(player_y))
 
+direcao = FRENTE
+frame_atual = 0
+tempo_animacao = 0
+andando = False
 
-    # --------------------------------------------------------
-    # ATUALIZAR
-    # --------------------------------------------------------
+modo_editor = False
+modo_editor_portas = False
 
-    def atualizar(
-        self,
-        teclas,
-        dt,
-        colisoes
-    ):
+mensagem = ""
+tempo_mensagem = 0
 
-        self.vel_x = 0
-        self.vel_y = 0
+def mover_e_testar(dx, dy):
+    global player_x, player_y
 
+    if dx:
+        teste = hitbox_player(player_x + dx, player_y)
 
-        # A
-        if teclas[pygame.K_a]:
+        if not colide_com_mapa(teste):
+            player_x += dx
 
-            self.vel_x = -VELOCIDADE
+    if dy:
+        teste = hitbox_player(player_x, player_y + dy)
 
-            self.direcao = ESQUERDA
-
-
-        # D
-        if teclas[pygame.K_d]:
-
-            self.vel_x = VELOCIDADE
-
-            self.direcao = DIREITA
-
-
-        # W
-        if teclas[pygame.K_w]:
-
-            self.vel_y = -VELOCIDADE
-
-            self.direcao = COSTAS
-
-
-        # S
-        if teclas[pygame.K_s]:
-
-            self.vel_y = VELOCIDADE
-
-            self.direcao = FRENTE
-
-
-        # Diagonal
-        if (
-            self.vel_x != 0
-            and
-            self.vel_y != 0
-        ):
-
-            fator = 0.7071
-
-            self.vel_x *= fator
-
-            self.vel_y *= fator
-
-
-        self.andando = (
-            self.vel_x != 0
-            or
-            self.vel_y != 0
-        )
-
-
-        if self.andando:
-
-            self.mover_com_colisao(
-                self.vel_x,
-                self.vel_y,
-                colisoes
-            )
-
-
-        self.atualizar_rect()
-
-        self.limitar_ao_mapa()
-
-        self.atualizar_animacao(
-            dt
-        )
-
-
-    # --------------------------------------------------------
-    # DESENHAR
-    # --------------------------------------------------------
-
-    def desenhar(
-        self,
-        tela,
-        camera_x,
-        camera_y
-    ):
-
-        imagem = self.obter_imagem()
-
-
-        pos_x = (
-            self.rect.centerx
-            -
-            camera_x
-            -
-            imagem.get_width() // 2
-        )
-
-
-        pos_y = (
-            self.rect.bottom
-            -
-            camera_y
-            -
-            imagem.get_height()
-        )
-
-
-        tela.blit(
-            imagem,
-            (
-                pos_x,
-                pos_y
-            )
-        )
-
-
-# ============================================================
-# PLAYER
-# ============================================================
-
-player = Player()
-
-
-# ============================================================
-# CÂMERA
-# ============================================================
-
-camera_x = 0
-camera_y = 0
-
-MARGEM_CAMERA_X = 220
-MARGEM_CAMERA_Y = 150
-
+        if not colide_com_mapa(teste):
+            player_y += dy
 
 def atualizar_camera():
-
-    global camera_x
-    global camera_y
-
-
-    limite_esquerdo = (
-        camera_x +
-        MARGEM_CAMERA_X
+    camera_x = (
+        player_x
+        + HITBOX_LARGURA // 2
+        - LARGURA // 2
     )
 
-    limite_direito = (
-        camera_x +
-        LARGURA -
-        MARGEM_CAMERA_X
+    camera_y = (
+        player_y
+        + HITBOX_ALTURA // 2
+        - ALTURA // 2
     )
 
-    limite_superior = (
-        camera_y +
-        MARGEM_CAMERA_Y
-    )
+    camera_x = max(0, min(camera_x, MAPA_LARGURA - LARGURA))
+    camera_y = max(0, min(camera_y, MAPA_ALTURA - ALTURA))
 
-    limite_inferior = (
-        camera_y +
-        ALTURA -
-        MARGEM_CAMERA_Y
-    )
+    return int(camera_x), int(camera_y)
 
+def obter_porta_proxima():
+    centro_x = player_x + HITBOX_LARGURA // 2
+    centro_y = player_y + HITBOX_ALTURA // 2
+    alcance = tamanho_celula_mundo() * 1.8
 
-    if player.rect.centerx < limite_esquerdo:
+    melhor_porta = None
+    menor_distancia = alcance * alcance
 
-        camera_x = (
-            player.rect.centerx -
-            MARGEM_CAMERA_X
+    for porta in portas:
+        if porta["aberta"]:
+            continue
+
+        rect = hitbox_porta(porta)
+
+        ponto_x = max(rect.left, min(centro_x, rect.right))
+        ponto_y = max(rect.top, min(centro_y, rect.bottom))
+
+        distancia_x = centro_x - ponto_x
+        distancia_y = centro_y - ponto_y
+
+        distancia = (
+            distancia_x * distancia_x
+            + distancia_y * distancia_y
         )
 
+        if distancia <= menor_distancia:
+            menor_distancia = distancia
+            melhor_porta = porta
 
-    elif player.rect.centerx > limite_direito:
+    return melhor_porta
 
-        camera_x = (
-            player.rect.centerx -
-            (
-                LARGURA -
-                MARGEM_CAMERA_X
-            )
+def mostrar_mensagem(texto):
+    global mensagem, tempo_mensagem
+
+    mensagem = texto
+    tempo_mensagem = 180
+    print(texto)
+
+def interagir():
+    porta = obter_porta_proxima()
+
+    if porta is not None:
+        porta["aberta"] = True
+        salvar_portas()
+        mostrar_mensagem("Você abriu a porta.")
+    else:
+        mostrar_mensagem(
+            "Você observa os arredores, mas não há nada para interagir aqui."
         )
 
-
-    if player.rect.centery < limite_superior:
-
-        camera_y = (
-            player.rect.centery -
-            MARGEM_CAMERA_Y
-        )
-
-
-    elif player.rect.centery > limite_inferior:
-
-        camera_y = (
-            player.rect.centery -
-            (
-                ALTURA -
-                MARGEM_CAMERA_Y
-            )
-        )
-
-
-    if camera_x < 0:
-
-        camera_x = 0
-
-
-    if camera_y < 0:
-
-        camera_y = 0
-
-
-    max_camera_x = max(
-        0,
-        MAPA_LARGURA -
-        LARGURA
-    )
-
-    max_camera_y = max(
-        0,
-        MAPA_ALTURA -
-        ALTURA
-    )
-
-
-    if camera_x > max_camera_x:
-
-        camera_x = max_camera_x
-
-
-    if camera_y > max_camera_y:
-
-        camera_y = max_camera_y
-
-
-# ============================================================
-# EDITOR DE COLISÃO
-# ============================================================
-
-editor = False
-
-pintando = False
-
-apagando = False
-
-
-# Câmera própria do editor
-editor_camera_x = 0
-editor_camera_y = 0
-
-
-def desenhar_editor():
-
-    global editor_camera_x
-    global editor_camera_y
-
-
-    # --------------------------------------------------------
-    # FUNDO
-    # --------------------------------------------------------
-
-    TELA.fill(
-        (10, 10, 12)
-    )
-
-
-    # --------------------------------------------------------
-    # MAPA
-    # --------------------------------------------------------
-
-    TELA.blit(
-        MAPA,
-        (
-            -editor_camera_x,
-            -editor_camera_y
-        )
-    )
-
-
-    # --------------------------------------------------------
-    # COLISÕES
-    # --------------------------------------------------------
-
-    camada = pygame.Surface(
-        (
-            LARGURA,
-            ALTURA
-        ),
-        pygame.SRCALPHA
-    )
-
-
-    tamanho_tela = int(
-        TAMANHO_CELULA *
-        ESCALA_MAPA
-    )
-
-
-    for cx, cy in celulas_colisao:
-
-        rect = celula_para_rect(
-            cx,
-            cy
-        )
-
-
-        rect.x -= editor_camera_x
-        rect.y -= editor_camera_y
-
-
-        pygame.draw.rect(
-            camada,
-            (255, 40, 40, 100),
-            rect
-        )
-
-
-        pygame.draw.rect(
-            camada,
-            (255, 80, 80, 180),
-            rect,
-            1
-        )
-
-
-    TELA.blit(
-        camada,
-        (0, 0)
-    )
-
-
-    # --------------------------------------------------------
-    # GRADE LEVE
-    # --------------------------------------------------------
-
-    # Mostra apenas quando o mouse está sobre o mapa
-
-    mouse_x, mouse_y = pygame.mouse.get_pos()
-
-
-    if (
-        0 <= mouse_x < LARGURA
-        and
-        0 <= mouse_y < ALTURA
-    ):
-
-        cx, cy = mouse_para_celula(
-            mouse_x,
-            mouse_y,
-            editor_camera_x,
-            editor_camera_y
-        )
-
-
-        if (
-            cx >= 0
-            and
-            cy >= 0
-        ):
-
-            destaque = celula_para_rect(
-                cx,
-                cy
-            )
-
-
-            destaque.x -= editor_camera_x
-            destaque.y -= editor_camera_y
-
-
-            pygame.draw.rect(
+def desenhar_portas(camera_x, camera_y):
+    for porta in portas:
+        rect = hitbox_porta(porta).move(-camera_x, -camera_y)
+
+        if porta["aberta"]:
+            pygame.draw.rect(TELA, VERDE, rect, 2)
+        else:
+            pygame.draw.rect(TELA, MARROM, rect)
+            pygame.draw.rect(TELA, AMARELO, rect, 2)
+
+            pygame.draw.circle(
                 TELA,
-                (255, 255, 255),
-                destaque,
+                AMARELO,
+                rect.center,
                 2
             )
 
+def desenhar_editor(camera_x, camera_y):
+    for cx, cy in celulas_colisao:
+        rect = celula_para_rect(cx, cy).move(-camera_x, -camera_y)
 
-    # --------------------------------------------------------
-    # PAINEL DE INSTRUÇÕES
-    # --------------------------------------------------------
+        if (
+            rect.right >= 0
+            and rect.left <= LARGURA
+            and rect.bottom >= 0
+            and rect.top <= ALTURA
+        ):
+            superficie = pygame.Surface(
+                (rect.width, rect.height),
+                pygame.SRCALPHA
+            )
 
-    fonte = pygame.font.Font(
-        None,
-        24
-    )
+            superficie.fill((255, 45, 45, 100))
+            TELA.blit(superficie, rect.topleft)
+            pygame.draw.rect(TELA, VERMELHO, rect, 1)
 
-    fonte_pequena = pygame.font.Font(
-        None,
-        20
-    )
+    fonte = pygame.font.SysFont(None, 24)
 
-
-    painel = pygame.Surface(
-        (
-            LARGURA,
-            90
-        ),
-        pygame.SRCALPHA
-    )
-
-
-    painel.fill(
-        (0, 0, 0, 210)
-    )
-
-
-    TELA.blit(
-        painel,
-        (0, 0)
-    )
-
-
-    texto1 = fonte.render(
-        "EDITOR DE COLISÃO",
+    texto = fonte.render(
+        "COLISOES: esquerdo marca | direito apaga | P/F2 salva",
         True,
-        (255, 255, 255)
+        BRANCO
     )
 
+    TELA.blit(texto, (12, 12))
 
-    texto2 = fonte_pequena.render(
-        "Mouse esquerdo: criar parede   |   Mouse direito: apagar",
+def desenhar_editor_portas(camera_x, camera_y):
+    fonte = pygame.font.SysFont(None, 24)
+
+    texto = fonte.render(
+        "PORTAS: esquerdo coloca | direito remove | F4/F6 salva",
         True,
-        (255, 255, 255)
+        BRANCO
     )
 
+    TELA.blit(texto, (12, 12))
 
-    texto3 = fonte_pequena.render(
-        "ENTER: salvar   |   ESC: sair   |   Setas: mover mapa",
-        True,
-        (255, 255, 255)
-    )
+    for porta in portas:
+        rect = hitbox_porta(porta).move(-camera_x, -camera_y)
+        cor = VERDE if porta["aberta"] else AMARELO
+        pygame.draw.rect(TELA, cor, rect, 2)
 
-
-    TELA.blit(
-        texto1,
-        (20, 12)
-    )
-
-
-    TELA.blit(
-        texto2,
-        (20, 42)
-    )
-
-
-    TELA.blit(
-        texto3,
-        (20, 65)
-    )
-
-
-    pygame.display.flip()
-
-
-# ============================================================
-# PINTAR COLISÃO
-# ============================================================
-
-def pintar_celula(
-    mouse_x,
-    mouse_y
-):
-
-    cx, cy = mouse_para_celula(
-        mouse_x,
-        mouse_y,
-        editor_camera_x,
-        editor_camera_y
-    )
-
-
-    # Não deixa pintar fora do mapa
-
-    limite_x = (
-        MAPA_ORIGINAL_LARGURA //
-        TAMANHO_CELULA
-    )
-
-    limite_y = (
-        MAPA_ORIGINAL_ALTURA //
-        TAMANHO_CELULA
-    )
-
-
-    if (
-        cx < 0
-        or
-        cy < 0
-        or
-        cx > limite_x
-        or
-        cy > limite_y
-    ):
-
+def desenhar_mensagem():
+    if tempo_mensagem <= 0 or not mensagem:
         return
 
+    caixa = pygame.Rect(30, ALTURA - 65, LARGURA - 60, 42)
 
-    if pintando:
+    pygame.draw.rect(TELA, (15, 15, 20), caixa)
+    pygame.draw.rect(TELA, (180, 180, 180), caixa, 1)
 
-        celulas_colisao.add(
-            (cx, cy)
-        )
+    texto = fonte_mensagem.render(mensagem, True, BRANCO)
+    TELA.blit(texto, (caixa.x + 12, caixa.y + 12))
 
+fonte_mensagem = pygame.font.SysFont(None, 25)
 
-    if apagando:
+executando = True
 
-        celulas_colisao.discard(
-            (cx, cy)
-        )
-
-
-# ============================================================
-# CARREGAR COLISÕES
-# ============================================================
-
-carregar_colisoes()
-
-
-# ============================================================
-# ESTADO
-# ============================================================
-
-rodando = True
-
-
-# ============================================================
-# LOOP PRINCIPAL
-# ============================================================
-
-while rodando:
-
+while executando:
     dt = RELOGIO.tick(FPS)
 
-
-    # ========================================================
-    # EDITOR
-    # ========================================================
-
-    if editor:
-
-        for evento in pygame.event.get():
-
-            if evento.type == pygame.QUIT:
-
-                rodando = False
-
-
-            # ------------------------------------------------
-            # TECLAS
-            # ------------------------------------------------
-
-            if evento.type == pygame.KEYDOWN:
-
-                # Sair do editor
-
-                if evento.key == pygame.K_ESCAPE:
-
-                    editor = False
-
-                    pintar = False
-                    apagando = False
-
-
-                # Salvar
-
-                elif evento.key == pygame.K_RETURN:
-
-                    salvar_colisoes()
-
-
-                # Setas movem o mapa
-
-                elif evento.key == pygame.K_LEFT:
-
-                    editor_camera_x -= 100
-
-
-                elif evento.key == pygame.K_RIGHT:
-
-                    editor_camera_x += 100
-
-
-                elif evento.key == pygame.K_UP:
-
-                    editor_camera_y -= 100
-
-
-                elif evento.key == pygame.K_DOWN:
-
-                    editor_camera_y += 100
-
-
-            # ------------------------------------------------
-            # MOUSE
-            # ------------------------------------------------
-
-            if evento.type == pygame.MOUSEBUTTONDOWN:
-
-                if evento.button == 1:
-
-                    pintando = True
-
-                    apagando = False
-
-
-                elif evento.button == 3:
-
-                    apagando = True
-
-                    pintando = False
-
-
-            if evento.type == pygame.MOUSEBUTTONUP:
-
-                if evento.button == 1:
-
-                    pintando = False
-
-
-                elif evento.button == 3:
-
-                    apagando = False
-
-
-            if evento.type == pygame.MOUSEMOTION:
-
-                if pintando or apagando:
-
-                    mouse_x, mouse_y = (
-                        pygame.mouse.get_pos()
-                    )
-
-
-                    pintar_celula(
-                        mouse_x,
-                        mouse_y
-                    )
-
-
-        # ----------------------------------------------------
-        # LIMITES DA CÂMERA DO EDITOR
-        # ----------------------------------------------------
-
-        max_editor_x = max(
-            0,
-            MAPA_LARGURA -
-            LARGURA
-        )
-
-
-        max_editor_y = max(
-            0,
-            MAPA_ALTURA -
-            ALTURA
-        )
-
-
-        editor_camera_x = max(
-            0,
-            min(
-                editor_camera_x,
-                max_editor_x
-            )
-        )
-
-
-        editor_camera_y = max(
-            0,
-            min(
-                editor_camera_y,
-                max_editor_y
-            )
-        )
-
-
-        desenhar_editor()
-
-
-        continue
-
-
-    # ========================================================
-    # JOGO NORMAL
-    # ========================================================
+    if tempo_mensagem > 0:
+        tempo_mensagem -= 1
 
     for evento in pygame.event.get():
-
         if evento.type == pygame.QUIT:
+            executando = False
 
-            rodando = False
+        elif evento.type == pygame.KEYDOWN:
+            if evento.key == pygame.K_ESCAPE:
+                if modo_editor:
+                    salvar_colisoes()
+                    modo_editor = False
+                elif modo_editor_portas:
+                    salvar_portas()
+                    modo_editor_portas = False
+                else:
+                    executando = False
 
+            elif evento.key in (pygame.K_p, pygame.K_F2):
+                if modo_editor:
+                    salvar_colisoes()
+                    modo_editor = False
+                    print("Editor de colisões fechado.")
+                elif not modo_editor_portas:
+                    modo_editor = True
+                    print("Editor de colisões aberto.")
 
-        if evento.type == pygame.KEYDOWN:
+            elif evento.key in (pygame.K_F4, pygame.K_F6):
+                if modo_editor_portas:
+                    salvar_portas()
+                    modo_editor_portas = False
+                    print("Editor de portas fechado.")
+                elif not modo_editor:
+                    modo_editor_portas = True
+                    print("Editor de portas aberto.")
 
-            # P abre o editor
+            elif evento.key == pygame.K_e:
+                if not modo_editor and not modo_editor_portas:
+                    interagir()
 
-            if evento.key == pygame.K_p:
+        elif evento.type == pygame.MOUSEBUTTONDOWN:
+            if modo_editor or modo_editor_portas:
+                mx, my = pygame.mouse.get_pos()
+                camera_x, camera_y = atualizar_camera()
 
-                editor = True
+                cx, cy = mouse_para_celula(
+                    mx,
+                    my,
+                    camera_x,
+                    camera_y
+                )
 
-                editor_camera_x = camera_x
-                editor_camera_y = camera_y
+                if not celula_valida(cx, cy):
+                    continue
 
+                if modo_editor:
+                    if evento.button == 1:
+                        celulas_colisao.add((cx, cy))
+                    elif evento.button == 3:
+                        celulas_colisao.discard((cx, cy))
 
-    # ========================================================
-    # TECLAS
-    # ========================================================
+                elif modo_editor_portas:
+                    if evento.button == 1:
+                        if porta_na_celula(cx, cy) is None:
+                            portas.append({
+                                "x": cx,
+                                "y": cy,
+                                "aberta": False
+                            })
+
+                    elif evento.button == 3:
+                        porta = porta_na_celula(cx, cy)
+
+                        if porta is not None:
+                            portas.remove(porta)
 
     teclas = pygame.key.get_pressed()
 
+    dx = 0
+    dy = 0
+    andando = False
 
-    # ========================================================
-    # COLISÕES
-    # ========================================================
+    if not modo_editor and not modo_editor_portas:
+        velocidade_atual = VELOCIDADE
 
-    colisoes = obter_colisoes()
+        if teclas[pygame.K_LSHIFT] or teclas[pygame.K_RSHIFT]:
+            velocidade_atual = VELOCIDADE_CORRIDA
 
+        if teclas[pygame.K_a] or teclas[pygame.K_LEFT]:
+            dx -= velocidade_atual
+            direcao = ESQUERDA
 
-    # ========================================================
-    # PLAYER
-    # ========================================================
+        if teclas[pygame.K_d] or teclas[pygame.K_RIGHT]:
+            dx += velocidade_atual
+            direcao = DIREITA
 
-    player.atualizar(
-        teclas,
-        dt,
-        colisoes
-    )
+        if teclas[pygame.K_w] or teclas[pygame.K_UP]:
+            dy -= velocidade_atual
+            direcao = COSTAS
 
+        if teclas[pygame.K_s] or teclas[pygame.K_DOWN]:
+            dy += velocidade_atual
+            direcao = FRENTE
 
-    # ========================================================
-    # CÂMERA
-    # ========================================================
+        andando = dx != 0 or dy != 0
 
-    atualizar_camera()
+        if dx and dy:
+            dx *= 0.7071
+            dy *= 0.7071
 
+        mover_e_testar(dx, dy)
 
-    # ========================================================
-    # DESENHAR JOGO
-    # ========================================================
+    if andando:
+        tempo_animacao += dt
 
-    TELA.fill(
-        (15, 15, 18)
-    )
+        while tempo_animacao >= INTERVALO_ANIMACAO:
+            frame_atual += 1
+            tempo_animacao -= INTERVALO_ANIMACAO
 
+    else:
+        tempo_animacao = 0
 
-    TELA.blit(
-        MAPA,
-        (
-            -camera_x,
-            -camera_y
+    camera_x, camera_y = atualizar_camera()
+
+    TELA.fill(PRETO)
+    TELA.blit(MAPA, (-camera_x, -camera_y))
+
+    desenhar_portas(camera_x, camera_y)
+
+    if direcao == COSTAS:
+        frames = FRAMES_COSTAS
+    else:
+        frames = FRAMES_FRENTE
+
+    indice = frame_atual % len(frames) if andando else 0
+    imagem_player = frames[indice]
+
+    if direcao == ESQUERDA:
+        imagem_player = pygame.transform.flip(
+            imagem_player,
+            True,
+            False
         )
+
+    desenho_x = int(
+        player_x
+        - camera_x
+        - (LARGURA_PERSONAGEM - HITBOX_LARGURA) // 2
     )
 
-
-    player.desenhar(
-        TELA,
-        camera_x,
-        camera_y
+    desenho_y = int(
+        player_y
+        - camera_y
+        - (ALTURA_PERSONAGEM - HITBOX_ALTURA)
     )
 
+    TELA.blit(imagem_player, (desenho_x, desenho_y))
+
+    if modo_editor:
+        desenhar_editor(camera_x, camera_y)
+
+    if modo_editor_portas:
+        desenhar_editor_portas(camera_x, camera_y)
+
+    desenhar_mensagem()
 
     pygame.display.flip()
 
-
-# ============================================================
-# FINALIZAR
-# ============================================================
+salvar_colisoes()
+salvar_portas()
 
 pygame.quit()
-
 sys.exit()

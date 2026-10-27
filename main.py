@@ -1,110 +1,108 @@
+
 import pygame
 import os
 import sys
 import json
-import math
+import random
 
 pygame.init()
 
 LARGURA = 960
 ALTURA = 640
 FPS = 60
-
 VELOCIDADE = 2.8
 VELOCIDADE_CORRIDA = 4.5
-
 ESCALA_MAPA = 3.0
 TAMANHO_CELULA = 12
-CELULA_MUNDO = int(TAMANHO_CELULA * ESCALA_MAPA)
-
+CELULA_MUNDO = TAMANHO_CELULA * ESCALA_MAPA
 LARGURA_PERSONAGEM = 90
 ALTURA_PERSONAGEM = 110
 HITBOX_LARGURA = 22
 HITBOX_ALTURA = 25
-INTERVALO_ANIMACAO = 110
+
+TELA = pygame.display.set_mode((LARGURA, ALTURA))
+pygame.display.set_caption("Between Two Worlds")
+RELOGIO = pygame.time.Clock()
+
+FONTE = pygame.font.SysFont("arial", 20)
+FONTE_PEQUENA = pygame.font.SysFont("arial", 16)
 
 PASTA = os.path.dirname(os.path.abspath(__file__))
-PASTA_ASSETS = os.path.join(PASTA, "assets")
+ASSETS = os.path.join(PASTA, "assets")
 
-ARQUIVO_COLISOES = os.path.join(PASTA, "collision_map.json")
-ARQUIVO_PORTAS = os.path.join(PASTA, "doors.json")
-ARQUIVO_BAUS = os.path.join(PASTA, "chests.json")
-ARQUIVO_INVENTARIO = os.path.join(PASTA, "inventory.json")
-
-tela = pygame.display.set_mode((LARGURA, ALTURA))
-pygame.display.set_caption("Between Two Worlds")
-relogio = pygame.time.Clock()
-
-fonte = pygame.font.SysFont("arial", 20)
-fonte_pequena = pygame.font.SysFont("arial", 15)
-fonte_titulo = pygame.font.SysFont("arial", 28, bold=True)
-
-BRANCO = (240, 235, 220)
-PRETO = (15, 13, 17)
-CINZA = (65, 59, 65)
-CINZA_CLARO = (120, 110, 112)
-DOURADO = (205, 165, 75)
-MARROM = (91, 52, 29)
-MARROM_CLARO = (135, 83, 43)
-VERDE = (105, 170, 105)
-VERMELHO = (190, 70, 70)
+ARQ_COLISOES = os.path.join(PASTA, "collision_map.json")
+ARQ_PORTAS = os.path.join(PASTA, "doors.json")
+ARQ_BAUS = os.path.join(PASTA, "chests.json")
+ARQ_INVENTARIO = os.path.join(PASTA, "inventory.json")
 
 
-def carregar_json(caminho, padrao):
-    if not os.path.exists(caminho):
-        return padrao
+def caminho(nome):
+    return os.path.join(ASSETS, nome)
 
+
+def carregar_json(arquivo, padrao):
     try:
-        with open(caminho, "r", encoding="utf-8") as arquivo:
-            return json.load(arquivo)
-    except (json.JSONDecodeError, OSError, TypeError):
-        print("Não foi possível ler:", caminho)
+        with open(arquivo, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
         return padrao
 
 
-def salvar_json(caminho, dados):
-    try:
-        with open(caminho, "w", encoding="utf-8") as arquivo:
-            json.dump(dados, arquivo, indent=4, ensure_ascii=False)
-    except OSError as erro:
-        print("Erro ao salvar:", erro)
+def salvar_json(arquivo, dados):
+    with open(arquivo, "w", encoding="utf-8") as f:
+        json.dump(dados, f, indent=4, ensure_ascii=False)
 
+
+def carregar_imagem(arquivo, tamanho=None):
+    try:
+        imagem = pygame.image.load(caminho(arquivo)).convert_alpha()
+        if tamanho:
+            imagem = pygame.transform.scale(imagem, tamanho)
+        return imagem
+    except (pygame.error, FileNotFoundError):
+        return None
 
 
 def encontrar_mapa():
-    if not os.path.isdir(PASTA_ASSETS):
+    ignorar = {
+        "player.png",
+        "player_back.png",
+        "player_sheet.png",
+        "front_walk.png",
+        "front_run.png",
+        "back_walk.png",
+        "back_run.png",
+        "left_walk.png",
+        "left_run.png",
+        "right_walk.png",
+        "right_run.png"
+    }
+
+    if not os.path.isdir(ASSETS):
         return None
 
-    extensoes = (".png", ".jpg", ".jpeg", ".bmp")
     candidatos = []
 
-    for nome in os.listdir(PASTA_ASSETS):
-        caminho = os.path.join(PASTA_ASSETS, nome)
-
-        if not os.path.isfile(caminho):
+    for nome in os.listdir(ASSETS):
+        if not nome.lower().endswith((".png", ".jpg", ".jpeg", ".bmp")):
             continue
 
-        if nome.lower() in (
-            "player.png",
-            "player_back.png",
-            "player_sheet.png"
+        if nome.lower() in ignorar:
+            continue
+
+        if any(
+            nome.lower().startswith(direcao + "_")
+            and any(tipo in nome.lower() for tipo in ("walk", "run"))
+            for direcao in ("front", "back", "left", "right")
         ):
             continue
 
-        if nome.lower().startswith((
-            "front_", "back_", "left_", "right_"
-        )):
-            continue
-
-        if not nome.lower().endswith(extensoes):
-            continue
-
         try:
-            imagem = pygame.image.load(caminho)
+            imagem = pygame.image.load(caminho(nome))
             largura, altura = imagem.get_size()
 
             if largura * altura > 200000:
-                candidatos.append((largura * altura, caminho))
+                candidatos.append((largura * altura, nome))
         except pygame.error:
             pass
 
@@ -115,312 +113,350 @@ def encontrar_mapa():
     return candidatos[0][1]
 
 
-caminho_mapa = encontrar_mapa()
+nome_mapa = encontrar_mapa()
 
-if caminho_mapa is None:
-    print("ERRO: não encontrei o mapa dentro da pasta assets.")
-    print("Coloque o arquivo do mapa dentro de assets e tente novamente.")
+if nome_mapa is None:
     pygame.quit()
+    print("Não encontrei o mapa dentro da pasta assets.")
+    print("Coloque a imagem do mapa em assets e execute novamente.")
     sys.exit()
 
-mapa_original = pygame.image.load(caminho_mapa).convert()
-mapa = pygame.transform.scale(
-    mapa_original,
-    (
-        int(mapa_original.get_width() * ESCALA_MAPA),
-        int(mapa_original.get_height() * ESCALA_MAPA)
-    )
-)
+MAPA_ORIGINAL = pygame.image.load(caminho(nome_mapa)).convert()
+MAPA = pygame.transform.scale_by(MAPA_ORIGINAL, ESCALA_MAPA)
+MAPA_LARGURA = MAPA.get_width()
+MAPA_ALTURA = MAPA.get_height()
 
-MAPA_LARGURA = mapa.get_width()
-MAPA_ALTURA = mapa.get_height()
-
-print("Mapa carregado:", caminho_mapa)
+print("Mapa carregado:", nome_mapa)
 print("Tamanho do mapa:", MAPA_LARGURA, "x", MAPA_ALTURA)
 
 
-
-def carregar_imagem(caminho):
-    if not os.path.exists(caminho):
-        return None
-
-    try:
-        imagem = pygame.image.load(caminho).convert_alpha()
-        return pygame.transform.scale(
-            imagem,
-            (LARGURA_PERSONAGEM, ALTURA_PERSONAGEM)
-        )
-    except pygame.error:
-        return None
-
-
-def carregar_frames(prefixo, quantidade=6):
+def carregar_animacao(direcao_animacao, acao):
     frames = []
 
-    for numero in range(1, quantidade + 1):
-        nome = "{}_{}.png".format(prefixo, numero)
-        caminho = os.path.join(PASTA_ASSETS, nome)
-        imagem = carregar_imagem(caminho)
+    for numero in range(1, 7):
+        nome = (
+            direcao_animacao
+            + "_"
+            + acao
+            + "_"
+            + str(numero)
+            + ".png"
+        )
 
-        if imagem is not None:
-            frames.append(imagem)
+        try:
+            imagem = pygame.image.load(
+                caminho(nome)
+            ).convert_alpha()
+        except (pygame.error, FileNotFoundError):
+            continue
+
+        largura_original, altura_original = imagem.get_size()
+
+        if largura_original <= 0 or altura_original <= 0:
+            continue
+
+        if (
+            largura_original == LARGURA_PERSONAGEM
+            and altura_original == ALTURA_PERSONAGEM
+        ):
+            quadro_final = imagem.copy()
+        else:
+            escala = min(
+                LARGURA_PERSONAGEM / largura_original,
+                ALTURA_PERSONAGEM / altura_original
+            )
+
+            nova_largura = max(
+                1,
+                round(largura_original * escala)
+            )
+            nova_altura = max(
+                1,
+                round(altura_original * escala)
+            )
+
+            imagem = pygame.transform.scale(
+                imagem,
+                (nova_largura, nova_altura)
+            )
+
+            quadro_final = pygame.Surface(
+                (LARGURA_PERSONAGEM, ALTURA_PERSONAGEM),
+                pygame.SRCALPHA
+            )
+
+            pos_x = (LARGURA_PERSONAGEM - nova_largura) // 2
+            pos_y = ALTURA_PERSONAGEM - nova_altura
+
+            quadro_final.blit(imagem, (pos_x, pos_y))
+
+        frames.append(quadro_final)
 
     return frames
 
 
-frames = {
-    "frente": carregar_frames("front_walk"),
-    "costas": carregar_frames("back_walk"),
-    "esquerda": carregar_frames("left_walk"),
-    "direita": carregar_frames("right_walk")
-}
+animacoes = {}
 
-frames_corrida = {
-    "frente": carregar_frames("front_run"),
-    "costas": carregar_frames("back_run"),
-    "esquerda": carregar_frames("left_run"),
-    "direita": carregar_frames("right_run")
-}
+for direcao_animacao in ("front", "back", "left", "right"):
+    animacoes[(direcao_animacao, "walk")] = carregar_animacao(
+        direcao_animacao,
+        "walk"
+    )
 
-sprite_frente = carregar_imagem(
-    os.path.join(PASTA_ASSETS, "player.png")
-)
-sprite_costas = carregar_imagem(
-    os.path.join(PASTA_ASSETS, "player_back.png")
+    animacoes[(direcao_animacao, "run")] = carregar_animacao(
+        direcao_animacao,
+        "run"
+    )
+
+
+player_frente = carregar_imagem(
+    "player.png",
+    (LARGURA_PERSONAGEM, ALTURA_PERSONAGEM)
 )
 
-if not frames["frente"] and sprite_frente is not None:
-    frames["frente"] = [sprite_frente]
+player_costas = carregar_imagem(
+    "player_back.png",
+    (LARGURA_PERSONAGEM, ALTURA_PERSONAGEM)
+)
 
-if not frames["costas"] and sprite_costas is not None:
-    frames["costas"] = [sprite_costas]
+if player_frente is None:
+    pygame.quit()
+    print("Não encontrei assets/player.png.")
+    sys.exit()
 
-for direcao in ("esquerda", "direita", "frente", "costas"):
-    if not frames[direcao]:
-        if sprite_frente is not None:
-            frames[direcao] = [sprite_frente]
-        else:
-            imagem_temporaria = pygame.Surface(
-                (LARGURA_PERSONAGEM, ALTURA_PERSONAGEM),
-                pygame.SRCALPHA
-            )
-            pygame.draw.rect(
-                imagem_temporaria,
-                (130, 35, 35),
-                (25, 10, 40, 90)
-            )
-            frames[direcao] = [imagem_temporaria]
-
-    if not frames_corrida[direcao]:
-        frames_corrida[direcao] = frames[direcao][:]
-
-print("Sprites de caminhada carregados.")
-print("Sprites de corrida carregados.")
+if player_costas is None:
+    player_costas = player_frente
 
 
+def imagem_personagem(direcao, correndo, andando, quadro):
+    acao = "run" if correndo else "walk"
+    frames = animacoes.get((direcao, acao), [])
+
+    if not frames and correndo:
+        frames = animacoes.get((direcao, "walk"), [])
+
+    if andando and frames:
+        return frames[quadro % len(frames)]
+
+    if direcao == "back":
+        return player_costas
+
+    if direcao == "front":
+        return player_frente
+
+    if frames:
+        return frames[0]
+
+    return player_frente
 
 
 def carregar_colisoes():
-    dados = carregar_json(ARQUIVO_COLISOES, [])
-    resultado = set()
+    dados = carregar_json(ARQ_COLISOES, [])
 
     if isinstance(dados, dict):
-        dados = dados.get("colisoes", dados.get("cells", []))
+        dados = dados.get(
+            "colisoes",
+            dados.get("collisions", [])
+        )
 
-    if not isinstance(dados, list):
-        return resultado
+    resultado = set()
 
-    for item in dados:
-        try:
-            if isinstance(item, dict):
-                if "cx" in item and "cy" in item:
-                    cx = int(item["cx"])
-                    cy = int(item["cy"])
-                else:
-                    cx = int(item["x"])
-                    cy = int(item["y"])
-
-            elif isinstance(item, (list, tuple)) and len(item) >= 2:
-                cx = int(item[0])
-                cy = int(item[1])
-
-            elif isinstance(item, str) and "," in item:
-                partes = item.split(",")
-                cx = int(partes[0])
-                cy = int(partes[1])
-
-            else:
-                continue
-
-            resultado.add((cx, cy))
-        except (ValueError, TypeError, KeyError):
-            continue
+    if isinstance(dados, list):
+        for item in dados:
+            try:
+                if isinstance(item, (list, tuple)) and len(item) >= 2:
+                    resultado.add((int(item[0]), int(item[1])))
+                elif isinstance(item, dict):
+                    resultado.add(
+                        (int(item["x"]), int(item["y"]))
+                    )
+            except (ValueError, TypeError, KeyError):
+                pass
 
     return resultado
 
 
 colisoes = carregar_colisoes()
-print("Colisões carregadas:", len(colisoes))
 
 
 def salvar_colisoes():
-    dados = []
-
-    for cx, cy in sorted(colisoes):
-        dados.append([cx, cy])
-
-    salvar_json(ARQUIVO_COLISOES, dados)
-    print("Colisões salvas:", len(colisoes))
+    salvar_json(
+        ARQ_COLISOES,
+        [list(c) for c in sorted(colisoes)]
+    )
 
 
+portas = carregar_json(ARQ_PORTAS, [])
+baus = carregar_json(ARQ_BAUS, [])
+inventario = carregar_json(ARQ_INVENTARIO, [])
 
+if not isinstance(portas, list):
+    portas = []
 
-def carregar_portas():
-    dados = carregar_json(ARQUIVO_PORTAS, [])
+if not isinstance(baus, list):
+    baus = []
 
-    if isinstance(dados, dict):
-        dados = dados.get("portas", [])
+if not isinstance(inventario, list):
+    inventario = []
 
-    if not isinstance(dados, list):
-        return []
+inventario_normalizado = []
 
-    resultado = []
-
-    for item in dados:
-        if not isinstance(item, dict):
-            continue
-
+for item in inventario:
+    if isinstance(item, str):
+        inventario_normalizado.append({
+            "nome": item,
+            "quantidade": 1
+        })
+    elif isinstance(item, dict) and "nome" in item:
         try:
-            porta = {
-                "x": int(item["x"]),
-                "y": int(item["y"]),
-                "aberta": bool(item.get("aberta", False))
-            }
-            resultado.append(porta)
-        except (ValueError, TypeError, KeyError):
-            continue
+            quantidade = int(item.get("quantidade", 1))
+        except (ValueError, TypeError):
+            quantidade = 1
 
-    return resultado
+        inventario_normalizado.append({
+            "nome": str(item["nome"]),
+            "quantidade": quantidade
+        })
 
-
-portas = carregar_portas()
+inventario = inventario_normalizado
 
 
 def salvar_portas():
-    salvar_json(ARQUIVO_PORTAS, portas)
-    print("Portas salvas:", len(portas))
-
-
-def retangulo_porta(porta):
-    return pygame.Rect(
-        porta["x"] * CELULA_MUNDO,
-        porta["y"] * CELULA_MUNDO,
-        CELULA_MUNDO * 2,
-        CELULA_MUNDO * 2
-    )
-
-
-
-
-ITENS_INICIAIS_BAU = [
-    "Poção antiga",
-    "Chave enferrujada",
-    "Moeda de prata"
-]
-
-
-def carregar_baus():
-    dados = carregar_json(ARQUIVO_BAUS, [])
-
-    if isinstance(dados, dict):
-        dados = dados.get("baus", [])
-
-    if not isinstance(dados, list):
-        return []
-
-    resultado = []
-
-    for item in dados:
-        if not isinstance(item, dict):
-            continue
-
-        try:
-            itens = item.get("itens", [])
-
-            if not isinstance(itens, list):
-                itens = []
-
-            bau = {
-                "x": int(item["x"]),
-                "y": int(item["y"]),
-                "aberto": bool(item.get("aberto", False)),
-                "itens": itens
-            }
-
-            resultado.append(bau)
-
-        except (ValueError, TypeError, KeyError):
-            continue
-
-    return resultado
-
-
-baus = carregar_baus()
+    salvar_json(ARQ_PORTAS, portas)
 
 
 def salvar_baus():
-    salvar_json(ARQUIVO_BAUS, baus)
-    print("Baús salvos:", len(baus))
-
-
-def retangulo_bau(bau):
-    return pygame.Rect(
-        bau["x"] * CELULA_MUNDO,
-        bau["y"] * CELULA_MUNDO,
-        CELULA_MUNDO,
-        CELULA_MUNDO
-    )
-
-
-
-def carregar_inventario():
-    dados = carregar_json(ARQUIVO_INVENTARIO, [])
-
-    if not isinstance(dados, list):
-        return []
-
-    inventario = []
-
-    for item in dados:
-        if isinstance(item, str):
-            inventario.append({
-                "nome": item,
-                "quantidade": 1
-            })
-
-        elif isinstance(item, dict):
-            nome = item.get("nome", "")
-            quantidade = item.get("quantidade", 1)
-
-            if nome:
-                try:
-                    quantidade = max(1, int(quantidade))
-                except (ValueError, TypeError):
-                    quantidade = 1
-
-                inventario.append({
-                    "nome": str(nome),
-                    "quantidade": quantidade
-                })
-
-    return inventario
-
-
-inventario = carregar_inventario()
+    salvar_json(ARQ_BAUS, baus)
 
 
 def salvar_inventario():
-    salvar_json(ARQUIVO_INVENTARIO, inventario)
+    salvar_json(ARQ_INVENTARIO, inventario)
+
+
+player_x = min(
+    1200,
+    max(0, MAPA_LARGURA - LARGURA_PERSONAGEM)
+)
+
+player_y = min(
+    900,
+    max(0, MAPA_ALTURA - ALTURA_PERSONAGEM)
+)
+
+camera_x = 0
+camera_y = 0
+
+direcao = "front"
+quadro = 0
+tempo_animacao = 0
+
+estamina = 100.0
+ESTAMINA_MAXIMA = 100.0
+DRENAGEM_ESTAMINA = 25.0
+RECUPERACAO_ESTAMINA = 15.0
+
+editor_colisoes = False
+editor_portas = False
+editor_baus = False
+
+inventario_aberto = False
+bau_aberto = None
+item_selecionado = 0
+
+mensagem = ""
+tempo_mensagem = 0
+
+
+def mostrar_mensagem(texto):
+    global mensagem, tempo_mensagem
+    mensagem = texto
+    tempo_mensagem = 180
+
+
+def celula_mundo(cx, cy):
+    return pygame.Rect(
+        int(cx * CELULA_MUNDO),
+        int(cy * CELULA_MUNDO),
+        int(CELULA_MUNDO),
+        int(CELULA_MUNDO)
+    )
+
+
+def retangulo_porta(porta):
+    base = celula_mundo(
+        int(porta.get("x", 0)),
+        int(porta.get("y", 0))
+    )
+
+    return pygame.Rect(
+        base.x,
+        base.y,
+        int(CELULA_MUNDO * 2),
+        int(CELULA_MUNDO * 2)
+    )
+
+
+def retangulo_bau(bau):
+    base = celula_mundo(
+        int(bau.get("x", 0)),
+        int(bau.get("y", 0))
+    )
+
+    return pygame.Rect(
+        base.x,
+        base.y,
+        int(CELULA_MUNDO),
+        int(CELULA_MUNDO)
+    )
+
+
+def hitbox_jogador(x=None, y=None):
+    if x is None:
+        x = player_x
+
+    if y is None:
+        y = player_y
+
+    return pygame.Rect(
+        int(x + (LARGURA_PERSONAGEM - HITBOX_LARGURA) / 2),
+        int(y + ALTURA_PERSONAGEM - HITBOX_ALTURA - 5),
+        HITBOX_LARGURA,
+        HITBOX_ALTURA
+    )
+
+
+def tem_colisao(x, y):
+    caixa = hitbox_jogador(x, y)
+
+    if caixa.left < 0 or caixa.top < 0:
+        return True
+
+    if (
+        caixa.right > MAPA_LARGURA
+        or caixa.bottom > MAPA_ALTURA
+    ):
+        return True
+
+    cx1 = int(caixa.left // CELULA_MUNDO)
+    cy1 = int(caixa.top // CELULA_MUNDO)
+    cx2 = int((caixa.right - 1) // CELULA_MUNDO)
+    cy2 = int((caixa.bottom - 1) // CELULA_MUNDO)
+
+    for cx in range(cx1, cx2 + 1):
+        for cy in range(cy1, cy2 + 1):
+            if (cx, cy) in colisoes:
+                return True
+
+    for porta in portas:
+        if not porta.get("aberta", False):
+            if caixa.colliderect(retangulo_porta(porta)):
+                return True
+
+    for bau in baus:
+        if caixa.colliderect(retangulo_bau(bau)):
+            return True
+
+    return False
 
 
 def adicionar_item(nome):
@@ -438,248 +474,329 @@ def adicionar_item(nome):
     salvar_inventario()
 
 
-def retirar_item_bau(bau, indice):
-    if indice < 0 or indice >= len(bau["itens"]):
-        return
+def objeto_mais_proximo(
+    lista,
+    funcao_retangulo,
+    distancia_maxima=95
+):
+    centro = hitbox_jogador().center
+    mais_proximo = None
+    menor_distancia = distancia_maxima
 
-    item = bau["itens"].pop(indice)
+    for objeto in lista:
+        ret = funcao_retangulo(objeto)
 
-    if isinstance(item, dict):
-        nome = item.get("nome", "Item desconhecido")
-        quantidade = max(1, int(item.get("quantidade", 1)))
-    else:
-        nome = str(item)
-        quantidade = 1
-
-    for numero in range(quantidade):
-        adicionar_item(nome)
-
-    salvar_baus()
-    print("Item obtido:", nome)
-
-
-
-player_x = 1200
-player_y = 900
-
-direcao = "frente"
-indice_frame = 0
-tempo_animacao = 0
-personagem_movendo = False
-personagem_correndo = False
-
-camera_x = 0
-camera_y = 0
-
-
-def retangulo_personagem(x=None, y=None):
-    if x is None:
-        x = player_x
-
-    if y is None:
-        y = player_y
-
-    return pygame.Rect(
-        int(x + (LARGURA_PERSONAGEM - HITBOX_LARGURA) / 2),
-        int(y + ALTURA_PERSONAGEM - HITBOX_ALTURA - 8),
-        HITBOX_LARGURA,
-        HITBOX_ALTURA
-    )
-
-
-def retangulo_no_mundo(retangulo):
-    return retangulo.move(camera_x, camera_y)
-
-
-def ha_colisao(retangulo):
-    if retangulo.left < 0 or retangulo.top < 0:
-        return True
-
-    if retangulo.right > MAPA_LARGURA:
-        return True
-
-    if retangulo.bottom > MAPA_ALTURA:
-        return True
-
-    cx_inicio = retangulo.left // CELULA_MUNDO
-    cy_inicio = retangulo.top // CELULA_MUNDO
-    cx_fim = (retangulo.right - 1) // CELULA_MUNDO
-    cy_fim = (retangulo.bottom - 1) // CELULA_MUNDO
-
-    for cx in range(cx_inicio, cx_fim + 1):
-        for cy in range(cy_inicio, cy_fim + 1):
-            if (cx, cy) in colisoes:
-                celula = pygame.Rect(
-                    cx * CELULA_MUNDO,
-                    cy * CELULA_MUNDO,
-                    CELULA_MUNDO,
-                    CELULA_MUNDO
-                )
-
-                if retangulo.colliderect(celula):
-                    return True
-
-    for porta in portas:
-        if not porta["aberta"]:
-            if retangulo.colliderect(retangulo_porta(porta)):
-                return True
-
-    for bau in baus:
-        if retangulo.colliderect(retangulo_bau(bau)):
-            return True
-
-    return False
-
-
-def atualizar_camera():
-    global camera_x, camera_y
-
-    centro_x = player_x + LARGURA_PERSONAGEM / 2
-    centro_y = player_y + ALTURA_PERSONAGEM / 2
-
-    camera_x = int(centro_x - LARGURA / 2)
-    camera_y = int(centro_y - ALTURA / 2)
-
-    camera_x = max(0, min(camera_x, MAPA_LARGURA - LARGURA))
-    camera_y = max(0, min(camera_y, MAPA_ALTURA - ALTURA))
-
-
-
-
-bau_atual = None
-indice_item_bau = 0
-mensagem = ""
-tempo_mensagem = 0
-
-
-def mostrar_mensagem(texto, duracao=1800):
-    global mensagem, tempo_mensagem
-
-    mensagem = texto
-    tempo_mensagem = pygame.time.get_ticks() + duracao
-
-
-def distancia_ate(retangulo):
-    px = player_x + LARGURA_PERSONAGEM / 2
-    py = player_y + ALTURA_PERSONAGEM - 15
-
-    ox = retangulo.centerx
-    oy = retangulo.centery
-
-    return math.sqrt((px - ox) ** 2 + (py - oy) ** 2)
-
-
-def encontrar_bau_proximo():
-    melhor = None
-    menor_distancia = 75
-
-    for bau in baus:
-        distancia = distancia_ate(retangulo_bau(bau))
+        dx = centro[0] - ret.centerx
+        dy = centro[1] - ret.centery
+        distancia = (dx * dx + dy * dy) ** 0.5
 
         if distancia < menor_distancia:
-            melhor = bau
             menor_distancia = distancia
+            mais_proximo = objeto
 
-    return melhor
-
-
-def encontrar_porta_proxima():
-    melhor = None
-    menor_distancia = 85
-
-    for porta in portas:
-        distancia = distancia_ate(retangulo_porta(porta))
-
-        if distancia < menor_distancia:
-            melhor = porta
-            menor_distancia = distancia
-
-    return melhor
+    return mais_proximo
 
 
 def interagir():
-    global bau_atual, indice_item_bau
+    global bau_aberto, item_selecionado
 
-    if bau_atual is not None:
-        bau_atual = None
-        mostrar_mensagem("Baú fechado.")
-        return
-
-    bau = encontrar_bau_proximo()
-
-    if bau is not None:
-        bau["aberto"] = True
-        bau_atual = bau
-        indice_item_bau = 0
-        salvar_baus()
-        mostrar_mensagem("Baú aberto. Clique em um item para pegá-lo.")
-        return
-
-    porta = encontrar_porta_proxima()
+    porta = objeto_mais_proximo(
+        portas,
+        retangulo_porta
+    )
 
     if porta is not None:
-        porta["aberta"] = not porta["aberta"]
+        porta["aberta"] = not porta.get("aberta", False)
         salvar_portas()
 
-        if porta["aberta"]:
-            mostrar_mensagem("Você abriu a porta.")
+        mostrar_mensagem(
+            "Porta aberta."
+            if porta["aberta"]
+            else "Porta fechada."
+        )
+        return
+
+    bau = objeto_mais_proximo(
+        baus,
+        retangulo_bau
+    )
+
+    if bau is not None:
+        if bau.get("aberto", False):
+            bau["aberto"] = False
+            bau_aberto = None
+            salvar_baus()
         else:
-            mostrar_mensagem("Você fechou a porta.")
+            bau["aberto"] = True
+            bau_aberto = bau
+            item_selecionado = 0
+
+            if "itens" not in bau:
+                bau["itens"] = [
+                    "Poção antiga",
+                    "Chave enferrujada",
+                    "Moeda de prata"
+                ]
+
+            salvar_baus()
 
         return
 
-    mostrar_mensagem("Nenhum baú ou porta por perto.")
+    mostrar_mensagem(
+        "Não há nada próximo para interagir."
+    )
 
 
-
-modo_editor_colisoes = False
-modo_editor_portas = False
-modo_editor_baus = False
-inventario_aberto = False
-
-
-def fechar_editores():
-    global modo_editor_colisoes, modo_editor_portas, modo_editor_baus
-
-    modo_editor_colisoes = False
-    modo_editor_portas = False
-    modo_editor_baus = False
+def desenhar_texto(
+    texto,
+    x,
+    y,
+    cor=(255, 255, 255),
+    fonte=FONTE
+):
+    imagem = fonte.render(str(texto), True, cor)
+    TELA.blit(imagem, (x, y))
 
 
-def alternar_editor_colisoes():
-    global modo_editor_colisoes
+def desenhar_barra_estamina():
+    pygame.draw.rect(
+        TELA,
+        (25, 25, 25),
+        (20, 20, 204, 24)
+    )
 
-    fechar_editores()
-    modo_editor_colisoes = True
-    mostrar_mensagem("Editor de colisões: clique esquerdo adiciona; direito remove.")
+    largura = int(
+        200 * estamina / ESTAMINA_MAXIMA
+    )
+
+    pygame.draw.rect(
+        TELA,
+        (190, 170, 65),
+        (22, 22, largura, 20)
+    )
+
+    pygame.draw.rect(
+        TELA,
+        (220, 220, 220),
+        (20, 20, 204, 24),
+        2
+    )
+
+    desenhar_texto(
+        "ESTAMINA",
+        230,
+        21,
+        (235, 235, 235),
+        FONTE_PEQUENA
+    )
 
 
-def alternar_editor_portas():
-    global modo_editor_portas
+def desenhar_editor():
+    if editor_colisoes:
+        desenhar_texto(
+            "EDITOR DE COLISOES: clique esquerdo adiciona | direito remove | P/F2 salva",
+            20,
+            ALTURA - 30,
+            (255, 230, 100),
+            FONTE_PEQUENA
+        )
 
-    fechar_editores()
-    modo_editor_portas = True
-    mostrar_mensagem("Editor de portas: clique esquerdo adiciona; direito remove.")
+        for cx, cy in colisoes:
+            ret = celula_mundo(cx, cy)
+            ret.x -= int(camera_x)
+            ret.y -= int(camera_y)
+
+            if TELA.get_rect().colliderect(ret):
+                pygame.draw.rect(
+                    TELA,
+                    (255, 0, 0),
+                    ret,
+                    2
+                )
+
+    if editor_portas:
+        desenhar_texto(
+            "EDITOR DE PORTAS: esquerdo adiciona | direito remove | F4/F6 salva",
+            20,
+            ALTURA - 30,
+            (255, 230, 100),
+            FONTE_PEQUENA
+        )
+
+    if editor_baus:
+        desenhar_texto(
+            "EDITOR DE BAUS: esquerdo adiciona | direito remove | F5/B salva",
+            20,
+            ALTURA - 30,
+            (255, 230, 100),
+            FONTE_PEQUENA
+        )
 
 
-def alternar_editor_baus():
-    global modo_editor_baus
+def desenhar_inventario():
+    pygame.draw.rect(
+        TELA,
+        (15, 13, 18),
+        (220, 100, 520, 430)
+    )
 
-    fechar_editores()
-    modo_editor_baus = True
-    mostrar_mensagem("Editor de baús: clique esquerdo adiciona; direito remove.")
+    pygame.draw.rect(
+        TELA,
+        (160, 145, 115),
+        (220, 100, 520, 430),
+        3
+    )
+
+    desenhar_texto(
+        "INVENTARIO",
+        245,
+        120,
+        (230, 210, 160)
+    )
+
+    if not inventario:
+        desenhar_texto(
+            "Seu inventario esta vazio.",
+            245,
+            170
+        )
+    else:
+        y = 170
+
+        for item in inventario:
+            desenhar_texto(
+                item["nome"] + " x" + str(item["quantidade"]),
+                250,
+                y
+            )
+            y += 30
+
+    desenhar_texto(
+        "Pressione I ou ESC para fechar",
+        245,
+        485,
+        (190, 190, 190),
+        FONTE_PEQUENA
+    )
 
 
-def salvar_editores():
-    salvar_colisoes()
-    salvar_portas()
+def desenhar_bau():
+    if bau_aberto is None:
+        return
+
+    pygame.draw.rect(
+        TELA,
+        (18, 14, 12),
+        (250, 170, 460, 300)
+    )
+
+    pygame.draw.rect(
+        TELA,
+        (190, 150, 80),
+        (250, 170, 460, 300),
+        3
+    )
+
+    desenhar_texto(
+        "BAU",
+        275,
+        190,
+        (235, 200, 125)
+    )
+
+    itens = bau_aberto.get("itens", [])
+
+    if not itens:
+        desenhar_texto(
+            "O bau esta vazio.",
+            280,
+            235
+        )
+    else:
+        for indice, item in enumerate(itens):
+            cor = (
+                (255, 230, 130)
+                if indice == item_selecionado
+                else (230, 230, 230)
+            )
+
+            prefixo = (
+                "> "
+                if indice == item_selecionado
+                else "  "
+            )
+
+            desenhar_texto(
+                prefixo + str(item),
+                280,
+                235 + indice * 30,
+                cor
+            )
+
+    desenhar_texto(
+        "Setas: selecionar | ENTER: pegar item",
+        275,
+        400,
+        (190, 190, 190),
+        FONTE_PEQUENA
+    )
+
+    desenhar_texto(
+        "E ou ESC: fechar",
+        275,
+        430,
+        (190, 190, 190),
+        FONTE_PEQUENA
+    )
+
+
+def pegar_item_bau():
+    global item_selecionado, bau_aberto
+
+    if bau_aberto is None:
+        return
+
+    itens = bau_aberto.get("itens", [])
+
+    if not itens:
+        mostrar_mensagem("O bau esta vazio.")
+        return
+
+    if (
+        item_selecionado < 0
+        or item_selecionado >= len(itens)
+    ):
+        item_selecionado = 0
+        return
+
+    item = itens.pop(item_selecionado)
+
+    adicionar_item(str(item))
     salvar_baus()
 
+    if not itens:
+        bau_aberto["aberto"] = False
+        bau_aberto = None
 
-def posicao_celula_mouse(posicao):
-    mx, my = posicao
-    mundo_x = mx + camera_x
-    mundo_y = my + camera_y
+        mostrar_mensagem(
+            "Item coletado. Bau vazio."
+        )
+    else:
+        item_selecionado = min(
+            item_selecionado,
+            len(itens) - 1
+        )
+
+        mostrar_mensagem(
+            "Item coletado: " + str(item)
+        )
+
+
+def posicao_mouse_mundo():
+    mouse_x, mouse_y = pygame.mouse.get_pos()
+
+    mundo_x = mouse_x + camera_x
+    mundo_y = mouse_y + camera_y
 
     cx = int(mundo_x // CELULA_MUNDO)
     cy = int(mundo_y // CELULA_MUNDO)
@@ -687,683 +804,447 @@ def posicao_celula_mouse(posicao):
     return cx, cy
 
 
-def editar_colisao(posicao, botao):
-    cx, cy = posicao_celula_mouse(posicao)
-
-    if botao == 1:
-        colisoes.add((cx, cy))
-        salvar_colisoes()
-
-    elif botao == 3:
-        colisoes.discard((cx, cy))
-        salvar_colisoes()
-
-
-def editar_porta(posicao, botao):
-    cx, cy = posicao_celula_mouse(posicao)
-
-    if botao == 1:
-        for porta in portas:
-            if porta["x"] == cx and porta["y"] == cy:
-                mostrar_mensagem("Já existe uma porta nessa posição.")
-                return
-
-        portas.append({
-            "x": cx,
-            "y": cy,
-            "aberta": False
-        })
-        salvar_portas()
-
-    elif botao == 3:
-        for porta in portas:
-            if porta["x"] == cx and porta["y"] == cy:
-                portas.remove(porta)
-                salvar_portas()
-                return
-
-
-def editar_bau(posicao, botao):
-    cx, cy = posicao_celula_mouse(posicao)
-
-    if botao == 1:
-        for bau in baus:
-            if bau["x"] == cx and bau["y"] == cy:
-                mostrar_mensagem("Já existe um baú nessa posição.")
-                return
-
-        baus.append({
-            "x": cx,
-            "y": cy,
-            "aberto": False,
-            "itens": ITENS_INICIAIS_BAU[:]
-        })
-
-        salvar_baus()
-        mostrar_mensagem("Baú criado com três itens de teste.")
-
-    elif botao == 3:
-        for bau in baus:
-            if bau["x"] == cx and bau["y"] == cy:
-                baus.remove(bau)
-
-                if bau_atual is bau:
-                    fechar_bau()
-
-                salvar_baus()
-                mostrar_mensagem("Baú removido.")
-                return
-
-
-def fechar_bau():
-    global bau_atual, indice_item_bau
-
-    bau_atual = None
-    indice_item_bau = 0
-
-
-
-
-def desenhar_bau(superficie, retangulo, aberto):
-    x = retangulo.x
-    y = retangulo.y
-    tamanho = retangulo.width
-
-    cor_madeira = MARROM_CLARO if aberto else MARROM
-
-    pygame.draw.rect(
-        superficie,
-        (35, 24, 20),
-        (x + 3, y + 7, tamanho - 6, tamanho - 10)
-    )
-
-    pygame.draw.rect(
-        superficie,
-        cor_madeira,
-        (x + 2, y + 3, tamanho - 4, tamanho - 8)
-    )
-
-    pygame.draw.rect(
-        superficie,
-        DOURADO,
-        (x + tamanho // 2 - 3, y + tamanho // 2, 6, 9)
-    )
-
-    pygame.draw.rect(
-        superficie,
-        (65, 39, 23),
-        (x + 5, y + 7, tamanho - 10, 4)
-    )
-
-    pygame.draw.rect(
-        superficie,
-        DOURADO,
-        (x + 2, y + 3, tamanho - 4, 2)
-    )
-
-
-
-
-def desenhar_inventario():
-    largura_painel = 560
-    altura_painel = 420
-
-    x = (LARGURA - largura_painel) // 2
-    y = (ALTURA - altura_painel) // 2
-
-    pygame.draw.rect(
-        tela, (25, 21, 27),
-        (x, y, largura_painel, altura_painel)
-    )
-    pygame.draw.rect(
-        tela, DOURADO,
-        (x, y, largura_painel, altura_painel), 3
-    )
-
-    titulo = fonte_titulo.render("INVENTÁRIO", True, DOURADO)
-    tela.blit(titulo, (x + 22, y + 16))
-
-    instrucoes = fonte_pequena.render(
-        "I ou ESC: fechar",
-        True,
-        BRANCO
-    )
-    tela.blit(instrucoes, (x + 22, y + 55))
-
-    colunas = 5
-    linhas = 4
-    tamanho_slot = 76
-    espacamento = 10
-
-    inicio_x = x + 22
-    inicio_y = y + 95
-
-    for linha in range(linhas):
-        for coluna in range(colunas):
-            indice = linha * colunas + coluna
-
-            slot_x = inicio_x + coluna * (tamanho_slot + espacamento)
-            slot_y = inicio_y + linha * (tamanho_slot + espacamento)
-
-            pygame.draw.rect(
-                tela,
-                (53, 45, 51),
-                (slot_x, slot_y, tamanho_slot, tamanho_slot)
-            )
-
-            pygame.draw.rect(
-                tela,
-                DOURADO if indice < len(inventario) else CINZA,
-                (slot_x, slot_y, tamanho_slot, tamanho_slot),
-                2
-            )
-
-            if indice < len(inventario):
-                item = inventario[indice]
-                nome = item["nome"]
-                quantidade = item["quantidade"]
-
-                palavras = nome.split()
-                linhas_nome = []
-                linha_texto = ""
-
-                for palavra in palavras:
-                    teste = (linha_texto + " " + palavra).strip()
-
-                    if fonte_pequena.size(teste)[0] > tamanho_slot - 8:
-                        linhas_nome.append(linha_texto)
-                        linha_texto = palavra
-                    else:
-                        linha_texto = teste
-
-                if linha_texto:
-                    linhas_nome.append(linha_texto)
-
-                for n, texto in enumerate(linhas_nome[:3]):
-                    imagem_texto = fonte_pequena.render(
-                        texto, True, BRANCO
-                    )
-                    tela.blit(
-                        imagem_texto,
-                        (
-                            slot_x + 4,
-                            slot_y + 8 + n * 16
-                        )
-                    )
-
-                if quantidade > 1:
-                    texto_qtd = fonte_pequena.render(
-                        "x" + str(quantidade),
-                        True,
-                        DOURADO
-                    )
-                    tela.blit(
-                        texto_qtd,
-                        (
-                            slot_x + tamanho_slot - texto_qtd.get_width() - 5,
-                            slot_y + tamanho_slot - 22
-                        )
-                    )
-
-    rodape = fonte_pequena.render(
-        "Itens guardados: " + str(len(inventario)),
-        True,
-        BRANCO
-    )
-    tela.blit(rodape, (x + 22, y + altura_painel - 28))
-
-
-
-
-def desenhar_janela_bau():
-    if bau_atual is None:
-        return
-
-    largura_painel = 480
-    altura_painel = 340
-
-    x = (LARGURA - largura_painel) // 2
-    y = (ALTURA - altura_painel) // 2
-
-    pygame.draw.rect(
-        tela, (25, 21, 27),
-        (x, y, largura_painel, altura_painel)
-    )
-    pygame.draw.rect(
-        tela, DOURADO,
-        (x, y, largura_painel, altura_painel), 3
-    )
-
-    titulo = fonte_titulo.render("BAÚ", True, DOURADO)
-    tela.blit(titulo, (x + 20, y + 15))
-
-    texto_ajuda = fonte_pequena.render(
-        "Clique em um item para pegá-lo. E ou ESC fecha.",
-        True,
-        BRANCO
-    )
-    tela.blit(texto_ajuda, (x + 20, y + 52))
-
-    if not bau_atual["itens"]:
-        texto_vazio = fonte.render(
-            "Este baú está vazio.",
-            True,
-            BRANCO
-        )
-        tela.blit(texto_vazio, (x + 25, y + 110))
-        return
-
-    for indice, item in enumerate(bau_atual["itens"][:8]):
-        item_y = y + 95 + indice * 27
-
-        if isinstance(item, dict):
-            nome = str(item.get("nome", "Item desconhecido"))
-            quantidade = item.get("quantidade", 1)
-            texto_item = nome + " x" + str(quantidade)
-        else:
-            texto_item = str(item)
-
-        cor = DOURADO if indice == indice_item_bau else BRANCO
-
-        pygame.draw.rect(
-            tela,
-            (57, 45, 42) if indice == indice_item_bau else (35, 30, 34),
-            (x + 20, item_y, largura_painel - 40, 24)
-        )
-
-        imagem_item = fonte_pequena.render(
-            texto_item, True, cor
-        )
-        tela.blit(imagem_item, (x + 30, item_y + 4))
-
-
-
-
-
-def desenhar_editor():
-    if not (
-        modo_editor_colisoes
-        or modo_editor_portas
-        or modo_editor_baus
-    ):
-        return
-
-    for cx, cy in colisoes:
-        retangulo = pygame.Rect(
-            cx * CELULA_MUNDO - camera_x,
-            cy * CELULA_MUNDO - camera_y,
-            CELULA_MUNDO,
-            CELULA_MUNDO
-        )
-
-        pygame.draw.rect(
-            tela,
-            (220, 40, 40, 110),
-            retangulo,
-            2
-        )
-
-    for porta in portas:
-        retangulo = retangulo_porta(porta).move(
-            -camera_x, -camera_y
-        )
-
-        cor = VERDE if porta["aberta"] else DOURADO
-        pygame.draw.rect(tela, cor, retangulo, 3)
-
-    for bau in baus:
-        retangulo = retangulo_bau(bau).move(
-            -camera_x, -camera_y
-        )
-        pygame.draw.rect(tela, (70, 170, 230), retangulo, 3)
-
-    if modo_editor_colisoes:
-        texto = "EDITOR DE COLISOES - clique esquerdo adiciona, direito remove, ESC salva"
-    elif modo_editor_portas:
-        texto = "EDITOR DE PORTAS - clique esquerdo adiciona, direito remove, ESC salva"
-    else:
-        texto = "EDITOR DE BAUS - clique esquerdo adiciona, direito remove, ESC salva"
-
-    faixa = pygame.Surface((LARGURA, 35))
-    faixa.set_alpha(220)
-    faixa.fill((15, 13, 17))
-    tela.blit(faixa, (0, 0))
-
-    imagem_texto = fonte_pequena.render(texto, True, BRANCO)
-    tela.blit(imagem_texto, (12, 9))
-
-
-
-
-def desenhar_hud():
-    pygame.draw.rect(
-        tela,
-        (20, 18, 22),
-        (10, ALTURA - 42, 390, 32)
-    )
-
-    texto = fonte_pequena.render(
-        "WASD/setas: mover | Shift: correr | E: interagir | I: inventário",
-        True,
-        BRANCO
-    )
-    tela.blit(texto, (18, ALTURA - 34))
-
-    if tempo_mensagem > pygame.time.get_ticks():
-        caixa = pygame.Rect(0, 12, LARGURA, 34)
-        pygame.draw.rect(tela, (25, 21, 27), caixa)
-
-        imagem_mensagem = fonte.render(mensagem, True, DOURADO)
-        tela.blit(
-            imagem_mensagem,
-            (
-                (LARGURA - imagem_mensagem.get_width()) // 2,
-                17
-            )
-        )
-
-
+def salvar_todos():
+    salvar_colisoes()
+    salvar_portas()
+    salvar_baus()
+    salvar_inventario()
 
 
 executando = True
 
 while executando:
-    delta = relogio.tick(FPS)
-    tempo_atual = pygame.time.get_ticks()
+    dt = min(
+        RELOGIO.tick(FPS) / 1000.0,
+        0.05
+    )
+
+    tempo_animacao += dt * 1000
+
+    if tempo_mensagem > 0:
+        tempo_mensagem -= 1
+
+    andando = False
+    correndo = False
 
     for evento in pygame.event.get():
-
         if evento.type == pygame.QUIT:
-            salvar_editores()
-            salvar_inventario()
+            salvar_todos()
             executando = False
 
         elif evento.type == pygame.KEYDOWN:
-
             if evento.key == pygame.K_ESCAPE:
-                if bau_atual is not None:
-                    fechar_bau()
+                if bau_aberto is not None:
+                    bau_aberto["aberto"] = False
+                    bau_aberto = None
+                    salvar_baus()
 
                 elif inventario_aberto:
                     inventario_aberto = False
 
                 elif (
-                    modo_editor_colisoes
-                    or modo_editor_portas
-                    or modo_editor_baus
+                    editor_colisoes
+                    or editor_portas
+                    or editor_baus
                 ):
-                    salvar_editores()
-                    fechar_editores()
-                    mostrar_mensagem("Editor fechado e dados salvos.")
+                    editor_colisoes = False
+                    editor_portas = False
+                    editor_baus = False
+                    salvar_todos()
 
-            elif evento.key == pygame.K_i:
-                if bau_atual is not None:
-                    fechar_bau()
+                else:
+                    salvar_todos()
+                    executando = False
 
+            elif evento.key in (
+                pygame.K_p,
+                pygame.K_F2
+            ):
+                editor_colisoes = not editor_colisoes
+                editor_portas = False
+                editor_baus = False
+                salvar_todos()
+
+            elif evento.key in (
+                pygame.K_F4,
+                pygame.K_F6
+            ):
+                editor_portas = not editor_portas
+                editor_colisoes = False
+                editor_baus = False
+                salvar_todos()
+
+            elif evento.key in (
+                pygame.K_F5,
+                pygame.K_b
+            ):
+                editor_baus = not editor_baus
+                editor_colisoes = False
+                editor_portas = False
+                salvar_todos()
+
+            elif (
+                evento.key == pygame.K_i
+                and bau_aberto is None
+            ):
                 inventario_aberto = not inventario_aberto
 
             elif evento.key == pygame.K_e:
-                if inventario_aberto:
-                    inventario_aberto = False
-                else:
+                if bau_aberto is not None:
+                    bau_aberto["aberto"] = False
+                    bau_aberto = None
+                    salvar_baus()
+
+                elif not inventario_aberto and not (
+                    editor_colisoes
+                    or editor_portas
+                    or editor_baus
+                ):
                     interagir()
 
-            elif evento.key in (pygame.K_p, pygame.K_F2):
-                if not inventario_aberto and bau_atual is None:
-                    if modo_editor_colisoes:
-                        salvar_colisoes()
-                        fechar_editores()
-                    else:
-                        alternar_editor_colisoes()
+            elif bau_aberto is not None:
+                itens_bau = bau_aberto.get("itens", [])
 
-            elif evento.key in (pygame.K_F4, pygame.K_F6):
-                if not inventario_aberto and bau_atual is None:
-                    if modo_editor_portas:
-                        salvar_portas()
-                        fechar_editores()
-                    else:
-                        alternar_editor_portas()
+                if evento.key in (
+                    pygame.K_UP,
+                    pygame.K_w
+                ):
+                    if itens_bau:
+                        item_selecionado = (
+                            item_selecionado - 1
+                        ) % len(itens_bau)
 
-            elif evento.key in (pygame.K_F5, pygame.K_b):
-                if not inventario_aberto and bau_atual is None:
-                    print("A tecla F5/B foi detectada!")
+                elif evento.key in (
+                    pygame.K_DOWN,
+                    pygame.K_s
+                ):
+                    if itens_bau:
+                        item_selecionado = (
+                            item_selecionado + 1
+                        ) % len(itens_bau)
 
-                    if modo_editor_baus:
-                        salvar_baus()
-                        fechar_editores()
-                    else:
-                        alternar_editor_baus()
-
-            elif evento.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                if bau_atual is not None and bau_atual["itens"]:
-                    retirar_item_bau(bau_atual, indice_item_bau)
-
-                    if bau_atual["itens"]:
-                        indice_item_bau = min(
-                            indice_item_bau,
-                            len(bau_atual["itens"]) - 1
-                        )
-                    else:
-                        indice_item_bau = 0
-
-            elif evento.key == pygame.K_UP:
-                if bau_atual is not None and bau_atual["itens"]:
-                    indice_item_bau = (
-                        indice_item_bau - 1
-                    ) % len(bau_atual["itens"])
-
-            elif evento.key == pygame.K_DOWN:
-                if bau_atual is not None and bau_atual["itens"]:
-                    indice_item_bau = (
-                        indice_item_bau + 1
-                    ) % len(bau_atual["itens"])
+                elif evento.key in (
+                    pygame.K_RETURN,
+                    pygame.K_SPACE
+                ):
+                    pegar_item_bau()
 
         elif evento.type == pygame.MOUSEBUTTONDOWN:
-            if evento.button in (1, 3):
-                if modo_editor_colisoes:
-                    editar_colisao(evento.pos, evento.button)
+            if (
+                editor_colisoes
+                or editor_portas
+                or editor_baus
+            ):
+                cx, cy = posicao_mouse_mundo()
 
-                elif modo_editor_portas:
-                    editar_porta(evento.pos, evento.button)
+                if evento.button == 1:
+                    if editor_colisoes:
+                        colisoes.add((cx, cy))
+                        salvar_colisoes()
 
-                elif modo_editor_baus:
-                    editar_bau(evento.pos, evento.button)
+                    elif editor_portas:
+                        existe = any(
+                            int(p.get("x", -1)) == cx
+                            and int(p.get("y", -1)) == cy
+                            for p in portas
+                        )
 
-                elif bau_atual is not None and evento.button == 1:
-                    x = (LARGURA - 480) // 2
-                    y = (ALTURA - 340) // 2
+                        if not existe:
+                            portas.append({
+                                "x": cx,
+                                "y": cy,
+                                "aberta": False
+                            })
+                            salvar_portas()
 
-                    inicio_itens = y + 95
-                    indice = (evento.pos[1] - inicio_itens) // 27
+                    elif editor_baus:
+                        existe = any(
+                            int(b.get("x", -1)) == cx
+                            and int(b.get("y", -1)) == cy
+                            for b in baus
+                        )
 
-                    dentro_painel = (
-                        x + 20 <= evento.pos[0] <= x + 460
-                        and inicio_itens <= evento.pos[1] <= y + 95 + 8 * 27
-                    )
+                        if not existe:
+                            baus.append({
+                                "x": cx,
+                                "y": cy,
+                                "aberto": False,
+                                "itens": [
+                                    "Pocao antiga",
+                                    "Chave enferrujada",
+                                    "Moeda de prata"
+                                ]
+                            })
+                            salvar_baus()
 
-                    if (
-                        dentro_painel
-                        and 0 <= indice < len(bau_atual["itens"])
-                    ):
-                        indice_item_bau = indice
-                        retirar_item_bau(bau_atual, indice)
+                elif evento.button == 3:
+                    if editor_colisoes:
+                        colisoes.discard((cx, cy))
+                        salvar_colisoes()
 
-                        if bau_atual["itens"]:
-                            indice_item_bau = min(
-                                indice_item_bau,
-                                len(bau_atual["itens"]) - 1
-                            )
-                        else:
-                            indice_item_bau = 0
+                    elif editor_portas:
+                        for porta in portas[:]:
+                            if (
+                                int(porta.get("x", -1)) == cx
+                                and int(porta.get("y", -1)) == cy
+                            ):
+                                portas.remove(porta)
 
-                elif inventario_aberto:
-                    pass
+                        salvar_portas()
 
-    
+                    elif editor_baus:
+                        for bau in baus[:]:
+                            if (
+                                int(bau.get("x", -1)) == cx
+                                and int(bau.get("y", -1)) == cy
+                            ):
+                                baus.remove(bau)
+
+                        salvar_baus()
+
+    if not executando:
+        break
+
     teclas = pygame.key.get_pressed()
 
-    pode_mover = (
-        not inventario_aberto
-        and bau_atual is None
-        and not modo_editor_colisoes
-        and not modo_editor_portas
-        and not modo_editor_baus
-    )
+    if not (
+        inventario_aberto
+        or bau_aberto is not None
+        or editor_colisoes
+        or editor_portas
+        or editor_baus
+    ):
+        dx = 0
+        dy = 0
 
-    dx = 0
-    dy = 0
-
-    if pode_mover:
-        if teclas[pygame.K_a] or teclas[pygame.K_LEFT]:
+        if (
+            teclas[pygame.K_LEFT]
+            or teclas[pygame.K_a]
+        ):
             dx -= 1
+            direcao = "left"
 
-        if teclas[pygame.K_d] or teclas[pygame.K_RIGHT]:
+        if (
+            teclas[pygame.K_RIGHT]
+            or teclas[pygame.K_d]
+        ):
             dx += 1
+            direcao = "right"
 
-        if teclas[pygame.K_w] or teclas[pygame.K_UP]:
+        if (
+            teclas[pygame.K_UP]
+            or teclas[pygame.K_w]
+        ):
             dy -= 1
 
-        if teclas[pygame.K_s] or teclas[pygame.K_DOWN]:
+            if dx == 0:
+                direcao = "back"
+
+        if (
+            teclas[pygame.K_DOWN]
+            or teclas[pygame.K_s]
+        ):
             dy += 1
 
-    personagem_movendo = dx != 0 or dy != 0
-    personagem_correndo = (
-        personagem_movendo
-        and (teclas[pygame.K_LSHIFT] or teclas[pygame.K_RSHIFT])
-    )
+            if dx == 0:
+                direcao = "front"
 
-    if dx != 0 and dy != 0:
-        dx *= 0.7071
-        dy *= 0.7071
+        andando = dx != 0 or dy != 0
 
-    velocidade = (
-        VELOCIDADE_CORRIDA
-        if personagem_correndo
-        else VELOCIDADE
-    )
+        correndo = (
+            teclas[pygame.K_LSHIFT]
+            or teclas[pygame.K_RSHIFT]
+        ) and andando and estamina > 0
 
-    deslocamento_x = dx * velocidade
-    deslocamento_y = dy * velocidade
+        velocidade = (
+            VELOCIDADE_CORRIDA
+            if correndo
+            else VELOCIDADE
+        )
 
-    if dx < 0:
-        direcao = "esquerda"
-    elif dx > 0:
-        direcao = "direita"
-    elif dy < 0:
-        direcao = "costas"
-    elif dy > 0:
-        direcao = "frente"
+        if correndo:
+            estamina -= DRENAGEM_ESTAMINA * dt
+        else:
+            estamina += RECUPERACAO_ESTAMINA * dt
 
-    
-    if deslocamento_x != 0:
-        novo_x = player_x + deslocamento_x
-        retangulo = retangulo_personagem(novo_x, player_y)
+        estamina = max(
+            0,
+            min(ESTAMINA_MAXIMA, estamina)
+        )
 
-        if not ha_colisao(retangulo):
-            player_x = novo_x
+        if dx != 0 and dy != 0:
+            dx *= 0.7071
+            dy *= 0.7071
 
-   
-    if deslocamento_y != 0:
-        novo_y = player_y + deslocamento_y
-        retangulo = retangulo_personagem(player_x, novo_y)
+        movimento_x = dx * velocidade * dt * 60
+        movimento_y = dy * velocidade * dt * 60
 
-        if not ha_colisao(retangulo):
-            player_y = novo_y
+        if movimento_x != 0:
+            novo_x = player_x + movimento_x
 
-    player_x = max(
-        0,
-        min(player_x, MAPA_LARGURA - LARGURA_PERSONAGEM)
-    )
-    player_y = max(
-        0,
-        min(player_y, MAPA_ALTURA - ALTURA_PERSONAGEM)
-    )
+            if not tem_colisao(novo_x, player_y):
+                player_x = novo_x
 
-    if personagem_movendo:
-        tempo_animacao += delta
+        if movimento_y != 0:
+            novo_y = player_y + movimento_y
 
-        if tempo_animacao >= INTERVALO_ANIMACAO:
+            if not tem_colisao(player_x, novo_y):
+                player_y = novo_y
+
+        if andando:
+            intervalo = 75 if correndo else 125
+
+            if tempo_animacao >= intervalo:
+                quadro += 1
+                tempo_animacao = 0
+        else:
+            quadro = 0
             tempo_animacao = 0
 
-            if personagem_correndo:
-                lista_frames = frames_corrida[direcao]
-            else:
-                lista_frames = frames[direcao]
+    centro_x = player_x + LARGURA_PERSONAGEM / 2
+    centro_y = player_y + ALTURA_PERSONAGEM / 2
 
-            if len(lista_frames) > 1:
-                indice_frame = (
-                    indice_frame + 1
-                ) % len(lista_frames)
-            else:
-                indice_frame = 0
-    else:
-        indice_frame = 0
-        tempo_animacao = 0
+    camera_x = centro_x - LARGURA / 2
+    camera_y = centro_y - ALTURA / 2
 
-    atualizar_camera()
-
-    
-    tela.blit(mapa, (-camera_x, -camera_y))
-
-    # Desenhar baús
-    for bau in baus:
-        retangulo = retangulo_bau(bau).move(
-            -camera_x, -camera_y
-        )
-        desenhar_bau(tela, retangulo, bau["aberto"])
-
-    
-    for porta in portas:
-        retangulo = retangulo_porta(porta).move(
-            -camera_x, -camera_y
-        )
-
-        if porta["aberta"]:
-            pygame.draw.rect(
-                tela, (80, 125, 75), retangulo, 2
-            )
-        else:
-            pygame.draw.rect(
-                tela, (95, 49, 32), retangulo
-            )
-            pygame.draw.rect(
-                tela, DOURADO, retangulo, 2
-            )
-
-    
-    if personagem_correndo:
-        lista_frames = frames_corrida[direcao]
-    else:
-        lista_frames = frames[direcao]
-
-    if lista_frames:
-        imagem_personagem = lista_frames[
-            indice_frame % len(lista_frames)
-        ]
-    else:
-        imagem_personagem = frames["frente"][0]
-
-    tela.blit(
-        imagem_personagem,
-        (int(player_x - camera_x), int(player_y - camera_y))
+    camera_x = max(
+        0,
+        min(camera_x, MAPA_LARGURA - LARGURA)
     )
 
+    camera_y = max(
+        0,
+        min(camera_y, MAPA_ALTURA - ALTURA)
+    )
+
+    TELA.fill((0, 0, 0))
+
+    TELA.blit(
+        MAPA,
+        (-int(camera_x), -int(camera_y))
+    )
+
+    if editor_colisoes:
+        for cx, cy in colisoes:
+            ret = celula_mundo(cx, cy)
+
+            ret.x -= int(camera_x)
+            ret.y -= int(camera_y)
+
+            if TELA.get_rect().colliderect(ret):
+                pygame.draw.rect(
+                    TELA,
+                    (220, 30, 30),
+                    ret,
+                    2
+                )
+
+    for porta in portas:
+        ret = retangulo_porta(porta)
+
+        ret.x -= int(camera_x)
+        ret.y -= int(camera_y)
+
+        cor = (
+            (100, 160, 100)
+            if porta.get("aberta", False)
+            else (125, 75, 35)
+        )
+
+        pygame.draw.rect(TELA, cor, ret)
+        pygame.draw.rect(
+            TELA,
+            (45, 30, 20),
+            ret,
+            3
+        )
+
+        if editor_portas:
+            pygame.draw.rect(
+                TELA,
+                (255, 220, 70),
+                ret,
+                2
+            )
+
+    for bau in baus:
+        ret = retangulo_bau(bau)
+
+        ret.x -= int(camera_x)
+        ret.y -= int(camera_y)
+
+        pygame.draw.rect(
+            TELA,
+            (130, 75, 30),
+            ret
+        )
+
+        pygame.draw.rect(
+            TELA,
+            (210, 175, 95),
+            ret,
+            2
+        )
+
+        if bau.get("aberto", False):
+            pygame.draw.line(
+                TELA,
+                (255, 220, 140),
+                ret.topleft,
+                ret.bottomright,
+                2
+            )
+
+        if editor_baus:
+            pygame.draw.rect(
+                TELA,
+                (255, 220, 70),
+                ret,
+                2
+            )
+
+    sprite = imagem_personagem(
+        direcao,
+        correndo,
+        andando,
+        quadro
+    )
+
+    TELA.blit(
+        sprite,
+        (
+            int(player_x - camera_x),
+            int(player_y - camera_y)
+        )
+    )
+
+    desenhar_barra_estamina()
     desenhar_editor()
-    desenhar_hud()
 
     if inventario_aberto:
         desenhar_inventario()
 
-    if bau_atual is not None:
-        desenhar_janela_bau()
+    if bau_aberto is not None:
+        desenhar_bau()
+
+    if tempo_mensagem > 0 and mensagem:
+        pygame.draw.rect(
+            TELA,
+            (20, 20, 20),
+            (20, ALTURA - 65, 480, 35)
+        )
+
+        desenhar_texto(
+            mensagem,
+            30,
+            ALTURA - 60,
+            (240, 230, 200),
+            FONTE_PEQUENA
+        )
 
     pygame.display.flip()
 
 
-
-
-salvar_editores()
-salvar_inventario()
-
+salvar_todos()
 pygame.quit()
 sys.exit()

@@ -1,1 +1,14 @@
-[]
+[
+    {
+        "nome": "Chave enferrujada",
+        "quantidade": 5
+    },
+    {
+        "nome": "Poção antiga",
+        "quantidade": 5
+    },
+    {
+        "nome": "Moeda de prata",
+        "quantidade": 5
+    }
+]

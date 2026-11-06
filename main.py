@@ -4,6 +4,7 @@ import os
 import sys
 import json
 import random
+import math
 
 pygame.init()
 
@@ -29,6 +30,7 @@ FONTE_PEQUENA = pygame.font.SysFont("arial", 16)
 
 PASTA = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(PASTA, "assets")
+CAMINHO_MUSICA_EASTER_EGG = os.path.join(ASSETS, "MusicaEasterEgg.wav")
 
 ARQ_COLISOES = os.path.join(PASTA, "collision_map.json")
 ARQ_PORTAS = os.path.join(PASTA, "doors.json")
@@ -366,6 +368,44 @@ item_selecionado = 0
 mensagem = ""
 tempo_mensagem = 0
 
+# EASTER EGG - CONFIGURACAO DAS ESTATUAS
+proxima_estatua = 1
+estatuas_ativadas = set()
+mensagem_enigma = []
+tempo_enigma = 0
+easter_egg_concluido = False
+aura_protetora_ativa = False
+mensagem_aura_pendente = False
+tempo_mensagem_aura = 0
+
+ESTATUAS = {
+    1: {"x": 3849, "y": 2442, "raio": 100, "altura_texto": 255},
+    2: {"x": 1860, "y": 2637, "raio": 100, "altura_texto": 210},
+    3: {"x": 1245, "y": 1530, "raio": 100, "altura_texto": 280},
+    4: {"x": 2487, "y": 2637, "raio": 100, "altura_texto": 210}
+}
+
+ENIGMAS_ESTATUAS = {
+    1: [
+        "Duas figuras pequenas guardam o salao,",
+        "mas e a da esquerda que chama tua atencao.",
+        "Entre pilares e sombras, ela esta a esperar;",
+        "segue pelo lado esquerdo para a encontrar."
+    ],
+    2: [
+        "Procura no jardim, entre folhas cor de sangue,",
+        "uma figura de pedra que a escuridao esconde.",
+        "Com as asas abertas, ela parece vigiar;",
+        "entre as arvores vermelhas, voce vai encontrar."
+    ],
+    3: [
+        "A busca esta quase no fim, falta pouco para encontrar;",
+        "duas pequenas figuras ainda vais avistar.",
+        "A primeira ja encontraste, nao precisas retornar;",
+        "procura a da direita, pois e la que deves chegar."
+    ]
+}
+
 
 def mostrar_mensagem(texto):
     global mensagem, tempo_mensagem
@@ -497,8 +537,127 @@ def objeto_mais_proximo(
     return mais_proximo
 
 
+def tocar_musica_easter_egg():
+    if not os.path.isfile(CAMINHO_MUSICA_EASTER_EGG):
+        print("Musica nao encontrada:", CAMINHO_MUSICA_EASTER_EGG)
+        return
+
+    try:
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
+        pygame.mixer.music.load(CAMINHO_MUSICA_EASTER_EGG)
+        pygame.mixer.music.play()
+    except pygame.error as erro:
+        print("Erro ao tocar a musica:", erro)
+
+
+def encontrar_estatua_proxima():
+    centro = hitbox_jogador().center
+    estatua_mais_proxima = None
+    menor_distancia = float("inf")
+
+    for numero, estatua in ESTATUAS.items():
+        dx = centro[0] - estatua["x"]
+        dy = centro[1] - estatua["y"]
+        distancia = math.sqrt(dx ** 2 + dy ** 2)
+
+        if distancia <= estatua["raio"] and distancia < menor_distancia:
+            menor_distancia = distancia
+            estatua_mais_proxima = numero
+
+    return estatua_mais_proxima
+
+
+def interagir_estatua(numero):
+    global proxima_estatua, mensagem_enigma, tempo_enigma
+    global easter_egg_concluido, estatuas_ativadas
+    global aura_protetora_ativa
+    global mensagem_aura_pendente, tempo_mensagem_aura
+
+    if easter_egg_concluido:
+        mostrar_mensagem("O segredo das estatuas ja foi descoberto!")
+        return
+
+    if numero == proxima_estatua and numero == 4:
+        easter_egg_concluido = True
+        aura_protetora_ativa = True
+        estatuas_ativadas.add(numero)
+        mensagem_enigma = []
+        tempo_enigma = 0
+        tocar_musica_easter_egg()
+        mostrar_mensagem("Voce descobriu o segredo das quatro estatuas!")
+        mensagem_aura_pendente = True
+        tempo_mensagem_aura = pygame.time.get_ticks() + 3500
+        return
+
+    if numero in ENIGMAS_ESTATUAS:
+        mensagem_enigma = ENIGMAS_ESTATUAS[numero][:]
+        tempo_enigma = pygame.time.get_ticks() + 10000
+    else:
+        mensagem_enigma = [
+            "A pedra guarda um segredo antigo...",
+            "Mas ainda nao chegou a hora de revela-lo."
+        ]
+        tempo_enigma = pygame.time.get_ticks() + 6000
+
+    if numero == proxima_estatua:
+        estatuas_ativadas.add(numero)
+        proxima_estatua += 1
+
+
+def desenhar_aura_protetora():
+    if not aura_protetora_ativa:
+        return
+
+    pulso = int((math.sin(pygame.time.get_ticks() / 280) + 1) * 4)
+    largura_aura = LARGURA_PERSONAGEM + 36 + pulso
+    altura_aura = ALTURA_PERSONAGEM + 30 + pulso
+    superficie_aura = pygame.Surface(
+        (largura_aura, altura_aura), pygame.SRCALPHA
+    )
+
+    pygame.draw.ellipse(
+        superficie_aura, (70, 160, 255, 30),
+        (0, 0, largura_aura, altura_aura)
+    )
+    pygame.draw.ellipse(
+        superficie_aura, (100, 190, 255, 55),
+        (5, 5, largura_aura - 10, altura_aura - 10)
+    )
+    pygame.draw.ellipse(
+        superficie_aura, (180, 225, 255, 180),
+        (10, 10, largura_aura - 20, altura_aura - 20), 3
+    )
+
+    pos_x = int(player_x - camera_x - (largura_aura - LARGURA_PERSONAGEM) / 2)
+    pos_y = int(player_y - camera_y - (altura_aura - ALTURA_PERSONAGEM) / 2)
+    TELA.blit(superficie_aura, (pos_x, pos_y))
+
+
+def desenhar_enigma():
+    if not mensagem_enigma or tempo_enigma <= pygame.time.get_ticks():
+        return
+
+    altura_linha = 24
+    altura_caixa = len(mensagem_enigma) * altura_linha + 24
+    caixa = pygame.Rect(
+        40, ALTURA - altura_caixa - 60, LARGURA - 80, altura_caixa
+    )
+    pygame.draw.rect(TELA, (25, 21, 27), caixa)
+    pygame.draw.rect(TELA, (205, 165, 75), caixa, 2)
+
+    for indice, linha in enumerate(mensagem_enigma):
+        imagem = FONTE_PEQUENA.render(linha, True, (240, 235, 220))
+        TELA.blit(imagem, (caixa.x + 15, caixa.y + 12 + indice * altura_linha))
+
+
 def interagir():
     global bau_aberto, item_selecionado
+
+    estatua = encontrar_estatua_proxima()
+    if estatua is not None:
+        interagir_estatua(estatua)
+        return
 
     porta = objeto_mais_proximo(
         portas,
@@ -1210,6 +1369,8 @@ while executando:
         quadro
     )
 
+    desenhar_aura_protetora()
+
     TELA.blit(
         sprite,
         (
@@ -1218,8 +1379,22 @@ while executando:
         )
     )
 
+    estatua_proxima = encontrar_estatua_proxima()
+    if estatua_proxima is not None and not easter_egg_concluido:
+        estatua = ESTATUAS[estatua_proxima]
+        texto_interacao = FONTE_PEQUENA.render("[E] Interagir", True, (240, 235, 220))
+        pos_x = int(estatua["x"] - camera_x - texto_interacao.get_width() // 2)
+        pos_y = int(estatua["y"] - camera_y - estatua["altura_texto"])
+        TELA.blit(texto_interacao, (pos_x, pos_y))
+
     desenhar_barra_estamina()
     desenhar_editor()
+    desenhar_enigma()
+
+    tempo_atual = pygame.time.get_ticks()
+    if mensagem_aura_pendente and tempo_atual >= tempo_mensagem_aura:
+        mensagem_aura_pendente = False
+        mostrar_mensagem("Voce ganhou uma aura de protecao!")
 
     if inventario_aberto:
         desenhar_inventario()

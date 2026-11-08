@@ -31,6 +31,7 @@ FONTE_PEQUENA = pygame.font.SysFont("arial", 16)
 PASTA = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(PASTA, "assets")
 CAMINHO_MUSICA_EASTER_EGG = os.path.join(ASSETS, "MusicaEasterEgg.wav")
+CAMINHO_MUSICA_PRINCIPAL = os.path.join(ASSETS, "trilha_principal.ogg")
 
 ARQ_COLISOES = os.path.join(PASTA, "collision_map.json")
 ARQ_PORTAS = os.path.join(PASTA, "doors.json")
@@ -387,22 +388,22 @@ ESTATUAS = {
 
 ENIGMAS_ESTATUAS = {
     1: [
-        "Duas figuras pequenas guardam o salao,",
-        "mas e a da esquerda que chama tua atencao.",
+        "Duas figuras pequenas guardam o salão,",
+        "mas e a da esquerda que chama tua atenção.",
         "Entre pilares e sombras, ela esta a esperar;",
         "segue pelo lado esquerdo para a encontrar."
     ],
     2: [
         "Procura no jardim, entre folhas cor de sangue,",
-        "uma figura de pedra que a escuridao esconde.",
+        "uma figura de pedra que a escuridão esconde.",
         "Com as asas abertas, ela parece vigiar;",
-        "entre as arvores vermelhas, voce vai encontrar."
+        "entre as árvores vermelhas, você vai encontrar."
     ],
     3: [
         "A busca esta quase no fim, falta pouco para encontrar;",
         "duas pequenas figuras ainda vais avistar.",
-        "A primeira ja encontraste, nao precisas retornar;",
-        "procura a da direita, pois e la que deves chegar."
+        "A primeira ja encontraste, não precisas retornar;",
+        "procura a da direita, pois e lá que deves chegar."
     ]
 }
 
@@ -549,6 +550,22 @@ def tocar_musica_easter_egg():
         pygame.mixer.music.play()
     except pygame.error as erro:
         print("Erro ao tocar a musica:", erro)
+
+def iniciar_musica_principal():
+    if not os.path.isfile(CAMINHO_MUSICA_PRINCIPAL):
+        print("Trilha sonora nao encontrada!")
+        return
+
+    try:
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
+
+        pygame.mixer.music.load(CAMINHO_MUSICA_PRINCIPAL)
+        pygame.mixer.music.set_volume(0.35)
+        pygame.mixer.music.play(-1)
+
+    except pygame.error as erro:
+        print("Erro ao tocar a trilha sonora:", erro)
 
 
 def encontrar_estatua_proxima():
@@ -969,6 +986,7 @@ def salvar_todos():
     salvar_baus()
     salvar_inventario()
 
+iniciar_musica_principal()
 
 executando = True
 

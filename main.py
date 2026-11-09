@@ -5,6 +5,341 @@ import json
 import random
 import math
 
+FASE2_VELOCIDADE_OBSTACULO = 400
+FASE2_INTERVALO_SPAWN = 0.5
+FASE2_TAMANHO_OBSTACULO = 30
+
+FASE2_LARGURA_PERSONAGEM = 90
+FASE2_ALTURA_PERSONAGEM = 110
+
+FASE2_VELOCIDADE = 150
+FASE2_VELOCIDADE_CORRIDA = 250
+
+
+def carregar_imagem_fase2(pasta_assets, nome, tamanho=None):
+    caminho = os.path.join(pasta_assets, nome)
+
+    try:
+        imagem = pygame.image.load(caminho).convert_alpha()
+
+        if tamanho:
+            imagem = pygame.transform.scale(imagem, tamanho)
+
+        return imagem
+
+    except (pygame.error, FileNotFoundError):
+        return None
+
+
+def carregar_animacao_fase2(pasta_assets, direcao, acao):
+    frames = []
+
+    for numero in range(1, 7):
+        nome = f"{direcao}_{acao}_{numero}.png"
+        caminho = os.path.join(pasta_assets, nome)
+
+        try:
+            imagem = pygame.image.load(caminho).convert_alpha()
+        except (pygame.error, FileNotFoundError):
+            continue
+
+        largura_original, altura_original = imagem.get_size()
+
+        escala = min(
+            FASE2_LARGURA_PERSONAGEM / largura_original,
+            FASE2_ALTURA_PERSONAGEM / altura_original
+        )
+
+        nova_largura = max(1, round(largura_original * escala))
+        nova_altura = max(1, round(altura_original * escala))
+
+        imagem = pygame.transform.scale(
+            imagem,
+            (nova_largura, nova_altura)
+        )
+
+        quadro = pygame.Surface(
+            (FASE2_LARGURA_PERSONAGEM, FASE2_ALTURA_PERSONAGEM),
+            pygame.SRCALPHA
+        )
+
+        pos_x = (FASE2_LARGURA_PERSONAGEM - nova_largura) // 2
+        pos_y = FASE2_ALTURA_PERSONAGEM - nova_altura
+
+        quadro.blit(imagem, (pos_x, pos_y))
+        frames.append(quadro)
+
+    return frames
+
+
+def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
+
+    pasta = os.path.dirname(os.path.abspath(__file__))
+    pasta_assets = os.path.join(pasta, "assets")
+    caminho_mapa = os.path.join(pasta, "mapa_2.jpeg")
+
+    mapa = pygame.image.load(caminho_mapa).convert()
+    mapa = pygame.transform.scale(mapa, (LARGURA, ALTURA))
+    animacoes = {}
+
+    for direcao in ("front", "back", "left", "right"):
+
+        animacoes[(direcao, "walk")] = carregar_animacao_fase2(
+            pasta_assets, direcao, "walk"
+        )
+
+        animacoes[(direcao, "run")] = carregar_animacao_fase2(
+            pasta_assets, direcao, "run"
+        )
+
+    player_frente = carregar_imagem_fase2(
+        pasta_assets,
+        "player.png",
+        (FASE2_LARGURA_PERSONAGEM, FASE2_ALTURA_PERSONAGEM)
+    )
+
+    player_costas = carregar_imagem_fase2(
+        pasta_assets,
+        "player_back.png",
+        (FASE2_LARGURA_PERSONAGEM, FASE2_ALTURA_PERSONAGEM)
+    )
+
+    if player_frente is None:
+        raise FileNotFoundError("Não encontrei assets/player.png")
+
+    if player_costas is None:
+        player_costas = player_frente
+
+    def imagem_personagem(direcao, correndo, andando, quadro):
+
+        acao = "run" if correndo else "walk"
+
+        frames = animacoes.get((direcao, acao), [])
+
+        if not frames and correndo:
+            frames = animacoes.get((direcao, "walk"), [])
+
+        if andando and frames:
+            return frames[quadro % len(frames)]
+
+        if direcao == "back":
+            return player_costas
+
+        if direcao == "front":
+            return player_frente
+
+        if frames:
+            return frames[0]
+
+        return player_frente
+
+    jogador_x = float((LARGURA - FASE2_LARGURA_PERSONAGEM) // 2)
+    jogador_y = float(250)
+
+    jogador = pygame.Rect(
+        int(jogador_x),
+        int(jogador_y),
+        FASE2_LARGURA_PERSONAGEM,
+        FASE2_ALTURA_PERSONAGEM
+    )
+
+    direcao = "front"
+    quadro = 0
+    tempo_animacao = 0
+
+    executando_fase = True
+
+    #coisas pa disviar
+    obstaculos = []
+    tempo_spawn = 0
+    morreu = False
+
+    tempo_sobrevivencia = 0
+    TEMPO_LIMITE = 60
+
+    
+
+    while executando_fase and not morreu:
+
+        dt = min(RELOGIO.tick(60) / 1000, 0.05)
+        tempo_sobrevivencia += dt
+        if tempo_sobrevivencia >= TEMPO_LIMITE:
+            executando_fase = False
+
+        tempo_animacao += dt * 1000
+
+        andando = False
+        correndo = False
+
+        
+        for evento in pygame.event.get():
+
+            if evento.type == pygame.QUIT:
+                return False
+
+            if evento.type == pygame.KEYDOWN:
+
+                if evento.key == pygame.K_ESCAPE:
+                    executando_fase = False
+
+        teclas = pygame.key.get_pressed()
+
+        dx = 0
+        dy = 0
+
+        # movi
+        if teclas[pygame.K_a] or teclas[pygame.K_LEFT]:
+            dx -= 1
+            direcao = "left"
+
+        if teclas[pygame.K_d] or teclas[pygame.K_RIGHT]:
+            dx += 1
+            direcao = "right"
+
+        andando = dx != 0 or dy != 0
+
+        correndo = (
+            teclas[pygame.K_LSHIFT]
+            or teclas[pygame.K_RSHIFT]
+        ) and andando
+
+        velocidade = (
+            FASE2_VELOCIDADE_CORRIDA
+            if correndo
+            else FASE2_VELOCIDADE
+        )
+
+        # pa n dar bug
+        if dx != 0 and dy != 0:
+            dx *= 0.7071
+            dy *= 0.7071
+
+        jogador_x += dx * velocidade * dt
+        jogador_y += dy * velocidade * dt
+
+        jogador.x = round(jogador_x)
+        jogador.y = round(jogador_y)
+
+        
+        jogador.clamp_ip(
+            pygame.Rect(0, 0, LARGURA, ALTURA)
+        )
+
+        jogador_x = float(jogador.x)
+        jogador_y = float(jogador.y)
+
+        if andando:
+
+            intervalo = 75 if correndo else 125
+
+            if tempo_animacao >= intervalo:
+                quadro += 1
+                tempo_animacao = 0
+
+        else:
+            quadro = 0
+            tempo_animacao = 0
+
+        sprite = imagem_personagem(
+            direcao,
+            correndo,
+            andando,
+            quadro
+        )
+
+
+        tempo_spawn += dt
+
+        if tempo_spawn >= FASE2_INTERVALO_SPAWN:
+
+            tempo_spawn = 0
+
+            x = random.randint(
+                0,
+                LARGURA - FASE2_TAMANHO_OBSTACULO
+            )
+
+            obstaculo = pygame.Rect(
+                x,
+                -FASE2_TAMANHO_OBSTACULO,
+                FASE2_TAMANHO_OBSTACULO,
+                FASE2_TAMANHO_OBSTACULO
+            )
+
+            obstaculos.append(obstaculo)
+
+        
+        for obstaculo in obstaculos[:]:
+            obstaculo.y += int(FASE2_VELOCIDADE_OBSTACULO * dt)
+            hitbox_obstaculo = obstaculo.inflate(-5, -5)
+            if jogador.colliderect(hitbox_obstaculo):
+                morreu = True
+            if obstaculo.top > ALTURA:
+                obstaculos.remove(obstaculo)
+
+        TELA.blit(mapa, (0, 0))
+
+        for obstaculo in obstaculos:
+            pygame.draw.rect(
+                TELA,
+                (255, 0, 0),
+                obstaculo
+            )
+
+        TELA.blit(sprite, jogador.topleft)
+
+        pygame.display.flip()
+
+    
+    if morreu:
+
+        fonte = pygame.font.Font(None, 70)
+
+        texto = fonte.render(
+            "VOCE MORREU!",
+            True,
+            (255, 0, 0)
+        )
+
+        TELA.fill((0, 0, 0))
+
+        TELA.blit(
+            texto,
+            (
+                LARGURA // 2 - texto.get_width() // 2,
+                ALTURA // 2 - texto.get_height() // 2
+            )
+        )
+
+        pygame.display.flip()
+        pygame.time.delay(2000)
+
+    elif tempo_sobrevivencia >= TEMPO_LIMITE:
+
+        fonte = pygame.font.Font(None, 70)
+
+        texto = fonte.render(
+            "o jogo acabou obrigado por jogar!",
+            True,
+            (255, 255, 255)
+        )
+
+        TELA.fill((0, 0, 0))
+
+        TELA.blit(
+            texto,
+            (
+                LARGURA // 2 - texto.get_width() // 2,
+                ALTURA // 2 - texto.get_height() // 2
+            )
+        )
+
+        pygame.display.flip()
+        pygame.time.delay(3000)
+
+    
+    return True
+
 pygame.init()
 
 LARGURA = 960
@@ -50,6 +385,7 @@ botoes_menu = {
 }
 
 botao_voltar = criar_botao(30, 550, 180, 50)
+botao_iniciar_fase2 = pygame.Rect(350, 390, 260, 70)
 
 tela_atual = "menu"
 
@@ -403,9 +739,10 @@ item_selecionado = 0
 TAMANHO_INIMIGO = 28
 VELOCIDADE_INIMIGO = 1.8
 ALCANCE_PERSEGUICAO = 300
-DISTANCIA_SPAWN_INIMIGO = 20
+DISTANCIA_SPAWN_INIMIGO = 180
 inimigo = pygame.Rect(0, 0, TAMANHO_INIMIGO, TAMANHO_INIMIGO)
 inimigo_ativo = True
+segunda_fase_liberada = False
 hp_jogador = 100
 hp_inimigo = 100
 defendendo = False
@@ -545,7 +882,7 @@ def tem_colisao(x, y):
 
     return False
 
-#inimigo
+#INIMIGOOO!!!!!
 def tem_colisao_inimigo(retangulo):
     if retangulo.left < 0 or retangulo.top < 0:
         return True
@@ -560,7 +897,7 @@ def tem_colisao_inimigo(retangulo):
     for cx in range(cx1, cx2 + 1):
         for cy in range(cy1, cy2 + 1):
             if (cx, cy) in colisoes:
-                return False
+                return True
 
     for porta in portas:
         if not porta.get("aberta", False) and retangulo.colliderect(retangulo_porta(porta)):
@@ -593,15 +930,8 @@ def posicionar_inimigo_longe():
             inimigo.topleft = (x, y)
             return
 
-    # achar o lugar certo caso contrario ir para longe
-    for y in range(0, MAPA_ALTURA - TAMANHO_INIMIGO, int(CELULA_MUNDO)):
-        for x in range(0, MAPA_LARGURA - TAMANHO_INIMIGO, int(CELULA_MUNDO)):
-            candidato = pygame.Rect(x, y, TAMANHO_INIMIGO, TAMANHO_INIMIGO)
-            dx = candidato.centerx - centro_jogador[0]
-            dy = candidato.centery - centro_jogador[1]
-            if dx * dx + dy * dy >= (DISTANCIA_SPAWN_INIMIGO // 2) ** 2 and not tem_colisao_inimigo(candidato):
-                inimigo.topleft = (x, y)
-                return
+    
+    return False
 
 
 def iniciar_combate():
@@ -712,11 +1042,18 @@ def desenhar_menu_combate():
 
 def processar_clique_combate(pos):
     global hp_jogador, hp_inimigo, defendendo, bonus_dano, mensagem_combate
-    global tela_atual, inimigo_ativo
+    global tela_atual, inimigo_ativo, executando, segunda_fase_liberada
 
     if hp_jogador <= 0 or hp_inimigo <= 0:
-        inimigo_ativo = hp_jogador > 0 and hp_inimigo > 0
-        tela_atual = "jogo"
+        # A fase 2 só é liberada se a personagem derrotar o inimigo.
+        if hp_inimigo <= 0 and hp_jogador > 0:
+            inimigo_ativo = False
+            segunda_fase_liberada = True
+            tela_atual = "segunda_fase_menu"
+        else:
+            # Se a personagem perder, a fase 2 continua bloqueada.
+            inimigo_ativo = True
+            tela_atual = "jogo"
         return
 
     botao_atacar = pygame.Rect(100, 550, 200, 55)
@@ -756,6 +1093,12 @@ def processar_clique_combate(pos):
         mensagem_combate = "Voce fugiu do combate!"
         posicionar_inimigo_longe()
         tela_atual = "jogo"
+
+    
+    if hp_inimigo <= 0 and hp_jogador > 0:
+        inimigo_ativo = False
+        segunda_fase_liberada = True
+        tela_atual = "segunda_fase_menu"
 
 
 posicionar_inimigo_longe()
@@ -1277,6 +1620,16 @@ while executando:
                 processar_clique_combate(evento.pos)
             continue
 
+        if tela_atual == "segunda_fase_menu":
+            if evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1:
+                if segunda_fase_liberada and botao_iniciar_fase2.collidepoint(evento.pos):
+                    resultado = executar_fase2(TELA, RELOGIO, LARGURA, ALTURA)
+                    if not resultado:
+                        executando = False
+                    else:
+                        tela_atual = "menu"
+            continue
+
         if tela_atual == "menu":
             if evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1:
                 mouse = evento.pos
@@ -1516,6 +1869,34 @@ while executando:
         pygame.draw.rect(TELA, (100, 25, 35), botao_voltar)
         texto_voltar = FONTE.render("VOLTAR", True, (255, 255, 255))
         TELA.blit(texto_voltar, texto_voltar.get_rect(center=botao_voltar.center))
+
+        pygame.display.flip()
+        continue
+
+    if tela_atual == "segunda_fase_menu":
+        TELA.fill((15, 10, 20))
+
+        titulo_fase2 = pygame.font.SysFont("arial", 54, bold=True).render(
+            "Você venceu!", True, (235, 220, 220)
+        )
+        TELA.blit(
+            titulo_fase2,
+            titulo_fase2.get_rect(center=(LARGURA // 2, 210))
+        )
+
+        descricao_fase2 = FONTE.render(
+            "Voce derrotou o inimigo agora ira para a segunda fase,prepare para desviar!",
+            True, (220, 220, 220)
+        )
+        TELA.blit(
+            descricao_fase2,
+            descricao_fase2.get_rect(center=(LARGURA // 2, 300))
+        )
+
+        pygame.draw.rect(TELA, (100, 25, 35), botao_iniciar_fase2)
+        pygame.draw.rect(TELA, (230, 220, 220), botao_iniciar_fase2, 2)
+        texto_iniciar = FONTE.render("INICIAR", True, (255, 255, 255))
+        TELA.blit(texto_iniciar, texto_iniciar.get_rect(center=botao_iniciar_fase2.center))
 
         pygame.display.flip()
         continue

@@ -1,4 +1,3 @@
-
 import pygame
 import os
 import sys
@@ -20,16 +19,44 @@ LARGURA_PERSONAGEM = 90
 ALTURA_PERSONAGEM = 110
 HITBOX_LARGURA = 22
 HITBOX_ALTURA = 25
+PASTA = os.path.dirname(os.path.abspath(__file__))
+ASSETS = os.path.join(PASTA, "assets")
 
 TELA = pygame.display.set_mode((LARGURA, ALTURA))
 pygame.display.set_caption("Between Two Worlds")
 RELOGIO = pygame.time.Clock()
+# MENU 
+CAMINHO_MENU = os.path.join(ASSETS, "menu.jpeg")
+MENU = pygame.image.load(CAMINHO_MENU).convert()
+MENU = pygame.transform.scale(MENU, (LARGURA, ALTURA))
+
+ESCALA_X = LARGURA / 928
+ESCALA_Y = ALTURA / 632
+
+def criar_botao(x, y, largura, altura):
+    return pygame.Rect(
+        int(x * ESCALA_X),
+        int(y * ESCALA_Y),
+        int(largura * ESCALA_X),
+        int(altura * ESCALA_Y)
+    )
+
+botoes_menu = {
+    "jogar": criar_botao(105, 340, 270, 40),
+    "continuar": criar_botao(105, 380, 270, 40),
+    "novo_jogo": criar_botao(105, 420, 270, 40),
+    "opcoes": criar_botao(105, 460, 270, 40),
+    "sair": criar_botao(105, 500, 270, 40)
+}
+
+botao_voltar = criar_botao(30, 550, 180, 50)
+
+tela_atual = "menu"
 
 FONTE = pygame.font.SysFont("arial", 20)
 FONTE_PEQUENA = pygame.font.SysFont("arial", 16)
 
-PASTA = os.path.dirname(os.path.abspath(__file__))
-ASSETS = os.path.join(PASTA, "assets")
+
 CAMINHO_MUSICA_EASTER_EGG = os.path.join(ASSETS, "MusicaEasterEgg.wav")
 CAMINHO_MUSICA_PRINCIPAL = os.path.join(ASSETS, "trilha_principal.ogg")
 
@@ -78,7 +105,8 @@ def encontrar_mapa():
         "left_walk.png",
         "left_run.png",
         "right_walk.png",
-        "right_run.png"
+        "right_run.png",
+        "menu.jpeg",
     }
 
     if not os.path.isdir(ASSETS):
@@ -986,7 +1014,8 @@ def salvar_todos():
     salvar_baus()
     salvar_inventario()
 
-iniciar_musica_principal()
+musica_iniciada = False
+executando = True
 
 executando = True
 
@@ -1005,6 +1034,43 @@ while executando:
     correndo = False
 
     for evento in pygame.event.get():
+        if evento.type == pygame.QUIT:
+            salvar_todos()
+            executando = False
+            continue
+
+        if tela_atual == "menu":
+            if evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1:
+                mouse = evento.pos
+
+                if botoes_menu["jogar"].collidepoint(mouse):
+                    tela_atual = "jogo"
+
+                elif botoes_menu["continuar"].collidepoint(mouse):
+                    tela_atual = "jogo"
+
+                elif botoes_menu["novo_jogo"].collidepoint(mouse):
+                    player_x = min(1200, max(0, MAPA_LARGURA - LARGURA_PERSONAGEM))
+                    player_y = min(900, max(0, MAPA_ALTURA - ALTURA_PERSONAGEM))
+                    tela_atual = "jogo"
+
+                elif botoes_menu["opcoes"].collidepoint(mouse):
+                    tela_atual = "opcoes"
+
+                elif botoes_menu["sair"].collidepoint(mouse):
+                    executando = False
+
+            continue
+
+        if tela_atual == "opcoes":
+            if evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1:
+                if botao_voltar.collidepoint(evento.pos):
+                    tela_atual = "menu"
+
+            elif evento.type == pygame.KEYDOWN and evento.key == pygame.K_ESCAPE:
+                tela_atual = "menu"
+
+            continue
         if evento.type == pygame.QUIT:
             salvar_todos()
             executando = False
@@ -1183,6 +1249,41 @@ while executando:
         break
 
     teclas = pygame.key.get_pressed()
+    if not executando:
+        break
+
+    if tela_atual == "menu":
+        TELA.blit(MENU, (0, 0))
+        pygame.display.flip()
+        continue
+
+    if tela_atual == "opcoes":
+        TELA.fill((15, 10, 20))
+
+        titulo = FONTE.render(
+            "CONFIGURACOES",
+            True,
+            (220, 220, 220)
+        )
+        TELA.blit(titulo, titulo.get_rect(center=(LARGURA // 2, 180)))
+
+        texto = FONTE.render(
+            "Tela: 960 x 640",
+            True,
+            (200, 200, 200)
+        )
+        TELA.blit(texto, texto.get_rect(center=(LARGURA // 2, 280)))
+
+        pygame.draw.rect(TELA, (100, 25, 35), botao_voltar)
+        texto_voltar = FONTE.render("VOLTAR", True, (255, 255, 255))
+        TELA.blit(texto_voltar, texto_voltar.get_rect(center=botao_voltar.center))
+
+        pygame.display.flip()
+        continue
+
+    if tela_atual == "jogo" and not musica_iniciada:
+        iniciar_musica_principal()
+        musica_iniciada = True
 
     if not (
         inventario_aberto

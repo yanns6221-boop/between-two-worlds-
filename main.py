@@ -1,4 +1,5 @@
 import pygame
+import cv2
 import os
 import sys
 import json
@@ -157,6 +158,7 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
 
     tempo_sobrevivencia = 0
     TEMPO_LIMITE = 60
+    venceu = False
 
     
 
@@ -166,6 +168,7 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
         tempo_sobrevivencia += dt
         if tempo_sobrevivencia >= TEMPO_LIMITE:
             executando_fase = False
+            venceu = True
 
         tempo_animacao += dt * 1000
 
@@ -176,7 +179,7 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
         for evento in pygame.event.get():
 
             if evento.type == pygame.QUIT:
-                return False
+                return None
 
             if evento.type == pygame.KEYDOWN:
 
@@ -337,9 +340,10 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
 
         pygame.display.flip()
         pygame.time.delay(3000)
+        return True
 
-    
-    return True
+    # ESC ou outra interrupcao antes dos 60 segundos nao conta como vitoria.
+    return False
 
 pygame.init()
 
@@ -358,9 +362,92 @@ HITBOX_ALTURA = 25
 PASTA = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(PASTA, "assets")
 
+# Arquivos de video e audio salvos na pasta assets.
+CAMINHO_VIDEO_INTRO = os.path.join(ASSETS, "VideoIntrodução.mp4")
+CAMINHO_AUDIO_ABERTURA = os.path.join(ASSETS, "audio_abertura.wav")
+CAMINHO_VIDEO_FINAL = os.path.join(ASSETS, "VideoFinal.mp4")
+
 TELA = pygame.display.set_mode((LARGURA, ALTURA))
 pygame.display.set_caption("Between Two Worlds")
 RELOGIO = pygame.time.Clock()
+
+
+def reproduzir_video(caminho_video, caminho_audio=None):
+    """Reproduz um MP4 na janela do Pygame. ESC pula o video.
+
+    Retorna True quando o video termina ou e pulado; False quando a
+    janela e fechada. O audio separado e opcional.
+    """
+    if not os.path.isfile(caminho_video):
+        raise FileNotFoundError("Video nao encontrado: " + caminho_video)
+
+    captura = cv2.VideoCapture(caminho_video)
+    if not captura.isOpened():
+        captura.release()
+        raise RuntimeError("Nao foi possivel abrir o video: " + caminho_video)
+
+    canal_audio = None
+    som_audio = None
+
+    try:
+        if caminho_audio and os.path.isfile(caminho_audio):
+            try:
+                if not pygame.mixer.get_init():
+                    pygame.mixer.init()
+                som_audio = pygame.mixer.Sound(caminho_audio)
+                canal_audio = som_audio.play()
+            except pygame.error as erro:
+                print("Nao foi possivel tocar o audio da abertura:", erro)
+
+        fps_video = captura.get(cv2.CAP_PROP_FPS)
+        if not fps_video or fps_video <= 0:
+            fps_video = 30
+        fps_video = max(1, min(60, round(fps_video)))
+        relogio_video = pygame.time.Clock()
+
+        while True:
+            for evento_video in pygame.event.get():
+                if evento_video.type == pygame.QUIT:
+                    return False
+                if (evento_video.type == pygame.KEYDOWN
+                        and evento_video.key == pygame.K_ESCAPE):
+                    return True
+
+            sucesso, quadro_video = captura.read()
+            if not sucesso:
+                break
+
+            quadro_video = cv2.cvtColor(quadro_video, cv2.COLOR_BGR2RGB)
+            superficie_video = pygame.surfarray.make_surface(
+                quadro_video.swapaxes(0, 1)
+            )
+
+            largura_video, altura_video = superficie_video.get_size()
+            escala = min(LARGURA / largura_video, ALTURA / altura_video)
+            novo_tamanho = (
+                max(1, int(largura_video * escala)),
+                max(1, int(altura_video * escala))
+            )
+            superficie_video = pygame.transform.smoothscale(
+                superficie_video, novo_tamanho
+            )
+
+            TELA.fill((0, 0, 0))
+            posicao = (
+                (LARGURA - novo_tamanho[0]) // 2,
+                (ALTURA - novo_tamanho[1]) // 2
+            )
+            TELA.blit(superficie_video, posicao)
+            pygame.display.flip()
+            relogio_video.tick(fps_video)
+
+        return True
+
+    finally:
+        captura.release()
+        if canal_audio is not None:
+            canal_audio.stop()
+
 # MENU 
 CAMINHO_MENU = os.path.join(ASSETS, "menu.jpeg")
 MENU = pygame.image.load(CAMINHO_MENU).convert()
@@ -1667,10 +1754,23 @@ while executando:
             if evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1:
                 if segunda_fase_liberada and botao_iniciar_fase2.collidepoint(evento.pos):
                     resultado = executar_fase2(TELA, RELOGIO, LARGURA, ALTURA)
-                    if not resultado:
+
+                    if resultado is None:
                         executando = False
+                    elif resultado:
+                        # O video final so aparece depois da vitoria na fase 2.
+                        pygame.mixer.music.stop()
+                        if reproduzir_video(CAMINHO_VIDEO_FINAL):
+                            tela_atual = "menu"
+                            musica_menu_iniciada = False
+                            musica_iniciada = False
+                        else:
+                            executando = False
                     else:
+                        # Derrota ou saida antecipada: nao mostra o video final.
                         tela_atual = "menu"
+                        musica_menu_iniciada = False
+                        musica_iniciada = False
             continue
 
         if tela_atual == "menu":
@@ -1678,7 +1778,15 @@ while executando:
                 mouse = evento.pos
 
                 if botoes_menu["jogar"].collidepoint(mouse):
-                    tela_atual = "jogo"
+                    pygame.mixer.music.stop()
+                    if reproduzir_video(
+                        CAMINHO_VIDEO_INTRO,
+                        CAMINHO_AUDIO_ABERTURA
+                    ):
+                        tela_atual = "jogo"
+                        musica_iniciada = False
+                    else:
+                        executando = False
 
                 elif botoes_menu["continuar"].collidepoint(mouse):
                     tela_atual = "jogo"
@@ -2099,13 +2207,12 @@ while executando:
 
     if inimigo_ativo:
         inimigo_tela = goblin_sprite.get_rect(
-        center=(
-            inimigo.centerx - int(camera_x),
-            inimigo.centery - int(camera_y)
+            center=(
+                inimigo.centerx - int(camera_x),
+                inimigo.centery - int(camera_y)
+            )
         )
-    )
-
-    TELA.blit(goblin_sprite, inimigo_tela)
+        TELA.blit(goblin_sprite, inimigo_tela)
 
     for porta in portas:
         ret = retangulo_porta(porta)
@@ -2135,7 +2242,7 @@ while executando:
                 2
             )
 
-for bau in baus:
+    for bau in baus:
         ret = retangulo_bau(bau)
 
         ret.x -= int(camera_x)

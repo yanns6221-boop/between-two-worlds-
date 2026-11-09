@@ -5,10 +5,11 @@ import json
 import random
 import math
 
-#obstaculos config
+# meteoros da fase 2
 FASE2_VELOCIDADE_OBSTACULO = 350
 FASE2_INTERVALO_SPAWN = 0.2
-FASE2_TAMANHO_OBSTACULO = 30
+FASE2_TAMANHO_OBSTACULO = 46
+FASE2_TAMANHO_METEORO = 70
 
 FASE2_LARGURA_PERSONAGEM = 90
 FASE2_ALTURA_PERSONAGEM = 110
@@ -105,6 +106,16 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
         (FASE2_LARGURA_PERSONAGEM, FASE2_ALTURA_PERSONAGEM)
     )
 
+    # imagem do meteoro que cai na fase 2
+    meteoro_sprite = carregar_imagem_fase2(
+        pasta_assets,
+        "meteoro.png",
+        (FASE2_TAMANHO_METEORO, FASE2_TAMANHO_METEORO)
+    )
+
+    if meteoro_sprite is None:
+        raise FileNotFoundError("Não encontrei assets/meteoro.png")
+
     if player_frente is None:
         raise FileNotFoundError("Não encontrei assets/player.png")
 
@@ -147,6 +158,7 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
     direcao = "front"
     quadro = 0
     tempo_animacao = 0
+    acao_animacao_anterior = "walk"
 
     executando_fase = True
 
@@ -158,7 +170,6 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
     tempo_sobrevivencia = 0
     TEMPO_LIMITE = 60
 
-    
 
     while executando_fase and not morreu:
 
@@ -172,7 +183,6 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
         andando = False
         correndo = False
 
-        
         for evento in pygame.event.get():
 
             if evento.type == pygame.QUIT:
@@ -221,7 +231,6 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
         jogador.x = round(jogador_x)
         jogador.y = round(jogador_y)
 
-        
         jogador.clamp_ip(
             pygame.Rect(0, 0, LARGURA, ALTURA)
         )
@@ -229,6 +238,15 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
         jogador_x = float(jogador.x)
         jogador_y = float(jogador.y)
 
+        # Identifica a animação atual e reinicia ao trocar entre andar e correr.
+        acao_atual = "run" if correndo else "walk"
+
+        if acao_atual != acao_animacao_anterior:
+            quadro = 0
+            tempo_animacao = 0
+            acao_animacao_anterior = acao_atual
+
+        # Só avança os quadros enquanto o personagem está se movimentando.
         if andando:
 
             intervalo = 75 if correndo else 125
@@ -269,29 +287,25 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
 
             obstaculos.append(obstaculo)
 
-        
         for obstaculo in obstaculos[:]:
             obstaculo.y += int(FASE2_VELOCIDADE_OBSTACULO * dt)
-            hitbox_obstaculo = obstaculo.inflate(-5, -5)
+            #hitbox
+            hitbox_obstaculo = obstaculo.inflate(-22, -30)
             if jogador.colliderect(hitbox_obstaculo):
                 morreu = True
             if obstaculo.top > ALTURA:
                 obstaculos.remove(obstaculo)
-
         TELA.blit(mapa, (0, 0))
 
         for obstaculo in obstaculos:
-            pygame.draw.rect(
-                TELA,
-                (255, 0, 0),
-                obstaculo
-            )
+            # desenha o meteoro no lugar do antigo bloco vermelho
+            pos_meteoro = meteoro_sprite.get_rect(center=obstaculo.center)
+            TELA.blit(meteoro_sprite, pos_meteoro)
 
         TELA.blit(sprite, jogador.topleft)
 
         pygame.display.flip()
 
-    
     if morreu:
 
         fonte = pygame.font.Font(None, 70)
@@ -338,7 +352,6 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
         pygame.display.flip()
         pygame.time.delay(3000)
 
-    
     return True
 
 pygame.init()
@@ -459,10 +472,11 @@ def encontrar_mapa():
         "right_walk.png",
         "right_run.png",
         "menu.png",
+        "menu.jpeg",
         "combate.jpeg",
         "personagem.png",
         "goblin.png",
-        "meteoro.",
+        "meteoro.png",
 
     }
 
@@ -748,11 +762,16 @@ camera_y = 0
 direcao = "front"
 quadro = 0
 tempo_animacao = 0
+acao_animacao_anterior = "walk"
 
 estamina = 100.0
 ESTAMINA_MAXIMA = 100.0
 DRENAGEM_ESTAMINA = 25.0
 RECUPERACAO_ESTAMINA = 15.0
+
+# Impede que a corrida fique ligando e desligando quando a estamina zera.
+corrida_bloqueada = False
+PERCENTUAL_RETORNO_CORRIDA = 0.25
 
 editor_colisoes = False
 editor_portas = False
@@ -2017,18 +2036,21 @@ while executando:
 
         andando = dx != 0 or dy != 0
 
-        correndo = (
+        shift_pressionado = (
             teclas[pygame.K_LSHIFT]
             or teclas[pygame.K_RSHIFT]
-        ) and andando and estamina > 0
-
-        velocidade = (
-            VELOCIDADE_CORRIDA
-            if correndo
-            else VELOCIDADE
         )
 
-        if correndo:
+        # Só tenta correr se houver estamina e a corrida não estiver bloqueada.
+        quer_correr = (
+            shift_pressionado
+            and andando
+            and estamina > 0
+            and not corrida_bloqueada
+        )
+
+        # Consome estamina uma única vez por quadro.
+        if quer_correr:
             estamina -= DRENAGEM_ESTAMINA * dt
         else:
             estamina += RECUPERACAO_ESTAMINA * dt
@@ -2036,6 +2058,25 @@ while executando:
         estamina = max(
             0,
             min(ESTAMINA_MAXIMA, estamina)
+        )
+
+        # Ao chegar a zero, bloqueia a corrida até recuperar 25% da barra.
+        if estamina <= 0:
+            corrida_bloqueada = True
+        elif estamina >= ESTAMINA_MAXIMA * PERCENTUAL_RETORNO_CORRIDA:
+            corrida_bloqueada = False
+
+        correndo = (
+            shift_pressionado
+            and andando
+            and estamina > 0
+            and not corrida_bloqueada
+        )
+
+        velocidade = (
+            VELOCIDADE_CORRIDA
+            if correndo
+            else VELOCIDADE
         )
 
         if dx != 0 and dy != 0:
@@ -2056,6 +2097,14 @@ while executando:
 
             if not tem_colisao(player_x, novo_y):
                 player_y = novo_y
+
+        # Identifica a animação atual e reinicia ao trocar entre andar e correr.
+        acao_atual = "run" if correndo else "walk"
+
+        if acao_atual != acao_animacao_anterior:
+            quadro = 0
+            tempo_animacao = 0
+            acao_animacao_anterior = acao_atual
 
         if andando:
             intervalo = 75 if correndo else 125

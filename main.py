@@ -574,7 +574,7 @@ def encontrar_mapa():
     return candidatos[0][1]
 
 
-nome_mapa = encontrar_mapa()
+nome_mapa = "mapa.png"
 
 if nome_mapa is None:
     pygame.quit()

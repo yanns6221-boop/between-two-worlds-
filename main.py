@@ -8,8 +8,7 @@ import math
 #obstaculos config
 FASE2_VELOCIDADE_OBSTACULO = 350
 FASE2_INTERVALO_SPAWN = 0.2
-FASE2_LARGURA_OBSTACULO = 48
-FASE2_ALTURA_OBSTACULO = 72
+FASE2_TAMANHO_OBSTACULO = 30
 
 FASE2_LARGURA_PERSONAGEM = 90
 FASE2_ALTURA_PERSONAGEM = 110
@@ -82,20 +81,6 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
 
     mapa = pygame.image.load(caminho_mapa).convert()
     mapa = pygame.transform.scale(mapa, (LARGURA, ALTURA))
-
-    # Imagem dos obstaculos que caem na fase 2
-    obstaculo_sprite = carregar_imagem_fase2(
-        pasta_assets,
-        "meteoro.jpeg",
-        (FASE2_LARGURA_OBSTACULO, FASE2_ALTURA_OBSTACULO)
-    )
-
-    if obstaculo_sprite is None:
-        raise FileNotFoundError(
-            "Nao encontrei assets/meteoro.jpeg. "
-            "Coloque a imagem meteoro.jpeg dentro da pasta assets."
-        )
-
     animacoes = {}
 
     for direcao in ("front", "back", "left", "right"):
@@ -272,14 +257,14 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
 
             x = random.randint(
                 0,
-                LARGURA - FASE2_LARGURA_OBSTACULO
+                LARGURA - FASE2_TAMANHO_OBSTACULO
             )
 
             obstaculo = pygame.Rect(
                 x,
-                -FASE2_ALTURA_OBSTACULO,
-                FASE2_LARGURA_OBSTACULO,
-                FASE2_ALTURA_OBSTACULO
+                -FASE2_TAMANHO_OBSTACULO,
+                FASE2_TAMANHO_OBSTACULO,
+                FASE2_TAMANHO_OBSTACULO
             )
 
             obstaculos.append(obstaculo)
@@ -296,7 +281,11 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
         TELA.blit(mapa, (0, 0))
 
         for obstaculo in obstaculos:
-            TELA.blit(obstaculo_sprite, obstaculo.topleft)
+            pygame.draw.rect(
+                TELA,
+                (255, 0, 0),
+                obstaculo
+            )
 
         TELA.blit(sprite, jogador.topleft)
 
@@ -407,6 +396,7 @@ FONTE_PEQUENA = pygame.font.SysFont("arial", 16)
 
 CAMINHO_MUSICA_EASTER_EGG = os.path.join(ASSETS, "MusicaEasterEgg.wav")
 CAMINHO_MUSICA_PRINCIPAL = os.path.join(ASSETS, "trilha_principal.ogg")
+CAMINHO_MUSICA_MENU = os.path.join(ASSETS, "SomDoMenu.ogg")
 
 ARQ_COLISOES = os.path.join(PASTA, "collision_map.json")
 ARQ_PORTAS = os.path.join(PASTA, "doors.json")
@@ -457,7 +447,9 @@ def encontrar_mapa():
         "menu.jpeg",
         "combate.jpeg",
         "personagem.png",
-        "meteoro.jpeg"
+        "goblin.png",
+        "meteoro.jpeg",
+
     }
 
     if not os.path.isdir(ASSETS):
@@ -1205,6 +1197,23 @@ def iniciar_musica_principal():
         print("Erro ao tocar a trilha sonora:", erro)
 
 
+def iniciar_musica_menu():
+    if not os.path.isfile(CAMINHO_MUSICA_MENU):
+        print("Musica do menu nao encontrada:", CAMINHO_MUSICA_MENU)
+        return
+
+    try:
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
+
+        pygame.mixer.music.load(CAMINHO_MUSICA_MENU)
+        pygame.mixer.music.set_volume(0.35)
+        pygame.mixer.music.play(-1)
+
+    except pygame.error as erro:
+        print("Erro ao tocar a musica do menu:", erro)
+
+
 def encontrar_estatua_proxima():
     centro = hitbox_jogador().center
     estatua_mais_proxima = None
@@ -1624,6 +1633,7 @@ def salvar_todos():
     salvar_inventario()
 
 musica_iniciada = False
+musica_menu_iniciada = False
 executando = True
 
 executando = True
@@ -1878,6 +1888,11 @@ while executando:
         break
 
     if tela_atual == "menu":
+        if not musica_menu_iniciada:
+            iniciar_musica_menu()
+            musica_menu_iniciada = True
+            musica_iniciada = False
+
         TELA.blit(MENU, (0, 0))
         pygame.display.flip()
         continue
@@ -1942,6 +1957,7 @@ while executando:
     if tela_atual == "jogo" and not musica_iniciada:
         iniciar_musica_principal()
         musica_iniciada = True
+        musica_menu_iniciada = False
 
     if not (
         inventario_aberto

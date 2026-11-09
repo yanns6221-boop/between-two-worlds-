@@ -5,8 +5,9 @@ import json
 import random
 import math
 
-FASE2_VELOCIDADE_OBSTACULO = 400
-FASE2_INTERVALO_SPAWN = 0.5
+#obstaculos config
+FASE2_VELOCIDADE_OBSTACULO = 350
+FASE2_INTERVALO_SPAWN = 0.2
 FASE2_TAMANHO_OBSTACULO = 30
 
 FASE2_LARGURA_PERSONAGEM = 90
@@ -577,6 +578,14 @@ for direcao_animacao in ("front", "back", "left", "right"):
         "run"
     )
 
+goblin_sprite = carregar_imagem(
+    "goblin.png",
+    (80, 90)
+)
+
+if goblin_sprite is None:
+    raise FileNotFoundError("Não encontrei assets/goblin.png")
+
 personagem = carregar_imagem(
     "personagem.png",
     (LARGURA_PERSONAGEM, ALTURA_PERSONAGEM))
@@ -737,10 +746,14 @@ item_selecionado = 0
 
 #config inimigo
 TAMANHO_INIMIGO = 28
-VELOCIDADE_INIMIGO = 1.8
+VELOCIDADE_INIMIGO = 2.0
 ALCANCE_PERSEGUICAO = 300
-DISTANCIA_SPAWN_INIMIGO = 180
-inimigo = pygame.Rect(0, 0, TAMANHO_INIMIGO, TAMANHO_INIMIGO)
+DISTANCIA_SPAWN_INIMIGO = 300
+inimigo = pygame.Rect(
+    0, 0,
+    TAMANHO_INIMIGO,
+    TAMANHO_INIMIGO
+)
 inimigo_ativo = True
 segunda_fase_liberada = False
 hp_jogador = 100
@@ -911,26 +924,33 @@ def tem_colisao_inimigo(retangulo):
 
 
 def posicionar_inimigo_longe():
+    global inimigo
+
     centro_jogador = hitbox_jogador().center
 
     posicoes = [
-        (100, 0),
-        (-100, 0),
-        (0, 100),
-        (0, -100)
+        (DISTANCIA_SPAWN_INIMIGO, 0),
+        (-DISTANCIA_SPAWN_INIMIGO, 0),
+        (0, DISTANCIA_SPAWN_INIMIGO),
+        (0, -DISTANCIA_SPAWN_INIMIGO),
+        (DISTANCIA_SPAWN_INIMIGO, DISTANCIA_SPAWN_INIMIGO),
+        (-DISTANCIA_SPAWN_INIMIGO, DISTANCIA_SPAWN_INIMIGO),
+        (DISTANCIA_SPAWN_INIMIGO, -DISTANCIA_SPAWN_INIMIGO),
+        (-DISTANCIA_SPAWN_INIMIGO, -DISTANCIA_SPAWN_INIMIGO)
     ]
 
     for dx, dy in posicoes:
-        x = int(centro_jogador[0] + dx - TAMANHO_INIMIGO / 2)
-        y = int(centro_jogador[1] + dy - TAMANHO_INIMIGO / 2)
-
-        candidato = pygame.Rect(x, y, TAMANHO_INIMIGO, TAMANHO_INIMIGO)
+        candidato = pygame.Rect(
+            centro_jogador[0] + dx - TAMANHO_INIMIGO // 2,
+            centro_jogador[1] + dy - TAMANHO_INIMIGO // 2,
+            TAMANHO_INIMIGO,
+            TAMANHO_INIMIGO
+        )
 
         if not tem_colisao_inimigo(candidato):
-            inimigo.topleft = (x, y)
-            return
+            inimigo = candidato
+            return False
 
-    
     return False
 
 
@@ -1012,13 +1032,14 @@ def desenhar_menu_combate():
     else:
         TELA.fill((28, 20, 30))
 
-    # Usa a imagem da personagem já carregada no jogo.
+    #personagem no combate
     personagem_combate = pygame.transform.scale(personagem, (150, 220))
-    TELA.blit(personagem_combate, (100, 260))
-    pygame.draw.rect(TELA, (190, 35, 35), (690, 330, 55, 55))
+    inimigo_combate = pygame.transform.scale(goblin_sprite, (180, 220))
+    TELA.blit(personagem_combate, (50, 300))
+    TELA.blit(inimigo_combate, (600, 300))
 
     barra_vida_combate(45, 55, hp_jogador, "personagem")
-    barra_vida_combate(615, 55, hp_inimigo, "INIMIGO")
+    barra_vida_combate(615, 55, hp_inimigo, "inimigo")
 
     botoes = [
         (pygame.Rect(100, 550, 200, 55), "ATACAR"),
@@ -1061,15 +1082,15 @@ def processar_clique_combate(pos):
     botao_fugir = pygame.Rect(660, 550, 200, 55)
 
     if botao_atacar.collidepoint(pos):
-        dano = random.randint(10, 20)
+        dano = random.randint(5, 20)
         if bonus_dano:
-            dano += 15
+            dano += 10
             bonus_dano = False
         hp_inimigo = max(0, hp_inimigo - dano)
         mensagem_combate = "Voce atacou! Dano: " + str(dano)
 
         if hp_inimigo > 0:
-            dano_inimigo = random.randint(15, 30)
+            dano_inimigo = random.randint(4, 20)
             if defendendo:
                 dano_inimigo //= 2
                 mensagem_combate += " Voce defendeu!"
@@ -1079,9 +1100,9 @@ def processar_clique_combate(pos):
     elif botao_defender.collidepoint(pos):
         defendendo = True
         bonus_dano = True
-        dano = random.randint(5, 10)
-        hp_inimigo = max(0, hp_inimigo - dano)
+        dano = random.randint(5, 8)
         mensagem_combate = "Voce defendeu e causou " + str(dano) + " de dano!"
+        hp_jogador=hp_jogador+dano//2
 
         if hp_inimigo > 0:
             dano_inimigo = random.randint(15, 30) // 2
@@ -2049,9 +2070,14 @@ while executando:
                 )
 
     if inimigo_ativo:
-        inimigo_tela = inimigo.move(-int(camera_x), -int(camera_y))
-        pygame.draw.rect(TELA, (220, 25, 25), inimigo_tela)
-        pygame.draw.rect(TELA, (70, 0, 0), inimigo_tela, 2)
+        inimigo_tela = goblin_sprite.get_rect(
+        center=(
+            inimigo.centerx - int(camera_x),
+            inimigo.centery - int(camera_y)
+        )
+    )
+
+    TELA.blit(goblin_sprite, inimigo_tela)
 
     for porta in portas:
         ret = retangulo_porta(porta)

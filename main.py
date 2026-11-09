@@ -158,6 +158,7 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
     direcao = "front"
     quadro = 0
     tempo_animacao = 0
+    acao_animacao_anterior = "walk"
 
     executando_fase = True
 
@@ -169,7 +170,6 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
     tempo_sobrevivencia = 0
     TEMPO_LIMITE = 60
 
-    
 
     while executando_fase and not morreu:
 
@@ -183,7 +183,6 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
         andando = False
         correndo = False
 
-        
         for evento in pygame.event.get():
 
             if evento.type == pygame.QUIT:
@@ -232,7 +231,6 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
         jogador.x = round(jogador_x)
         jogador.y = round(jogador_y)
 
-        
         jogador.clamp_ip(
             pygame.Rect(0, 0, LARGURA, ALTURA)
         )
@@ -240,6 +238,15 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
         jogador_x = float(jogador.x)
         jogador_y = float(jogador.y)
 
+        # Identifica a animação atual e reinicia ao trocar entre andar e correr.
+        acao_atual = "run" if correndo else "walk"
+
+        if acao_atual != acao_animacao_anterior:
+            quadro = 0
+            tempo_animacao = 0
+            acao_animacao_anterior = acao_atual
+
+        # Só avança os quadros enquanto o personagem está se movimentando.
         if andando:
 
             intervalo = 75 if correndo else 125
@@ -280,7 +287,6 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
 
             obstaculos.append(obstaculo)
 
-        
         for obstaculo in obstaculos[:]:
             obstaculo.y += int(FASE2_VELOCIDADE_OBSTACULO * dt)
             #hitbox
@@ -300,7 +306,6 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
 
         pygame.display.flip()
 
-    
     if morreu:
 
         fonte = pygame.font.Font(None, 70)
@@ -347,7 +352,6 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
         pygame.display.flip()
         pygame.time.delay(3000)
 
-    
     return True
 
 pygame.init()
@@ -370,13 +374,17 @@ ASSETS = os.path.join(PASTA, "assets")
 TELA = pygame.display.set_mode((LARGURA, ALTURA))
 pygame.display.set_caption("Between Two Worlds")
 RELOGIO = pygame.time.Clock()
-# MENU 
-CAMINHO_MENU = os.path.join(ASSETS, "menu.jpeg")
+
+# MENU PRINCIPAL
+
+CAMINHO_MENU = os.path.join(ASSETS, "menu.png")
+
 MENU = pygame.image.load(CAMINHO_MENU).convert()
 MENU = pygame.transform.scale(MENU, (LARGURA, ALTURA))
 
-ESCALA_X = LARGURA / 928
-ESCALA_Y = ALTURA / 632
+ESCALA_X = LARGURA / 1536
+ESCALA_Y = ALTURA / 1024
+
 
 def criar_botao(x, y, largura, altura):
     return pygame.Rect(
@@ -386,13 +394,21 @@ def criar_botao(x, y, largura, altura):
         int(altura * ESCALA_Y)
     )
 
+
+# Botões da nova imagem
 botoes_menu = {
-    "jogar": criar_botao(105, 340, 270, 40),
-    "continuar": criar_botao(105, 380, 270, 40),
-    "novo_jogo": criar_botao(105, 420, 270, 40),
-    "opcoes": criar_botao(105, 460, 270, 40),
-    "sair": criar_botao(105, 500, 270, 40)
+    "jogar": criar_botao(238, 550, 374, 55),
+
+    "opcoes": criar_botao(238, 617, 374, 55),
+
+    "sair": criar_botao(238, 684, 374, 55)
 }
+
+botao_voltar = criar_botao(30, 550, 180, 50)
+
+botao_iniciar_fase2 = pygame.Rect(350, 390, 260, 70)
+
+tela_atual = "menu"
 
 botao_voltar = criar_botao(30, 550, 180, 50)
 botao_iniciar_fase2 = pygame.Rect(350, 390, 260, 70)
@@ -452,7 +468,7 @@ def encontrar_mapa():
         "left_run.png",
         "right_walk.png",
         "right_run.png",
-        "menu.jpeg",
+        "menu.png",
         "combate.jpeg",
         "personagem.png",
         "goblin.png",
@@ -678,6 +694,7 @@ def salvar_colisoes():
     )
 
 
+
 portas = carregar_json(ARQ_PORTAS, [])
 baus = carregar_json(ARQ_BAUS, [])
 inventario = carregar_json(ARQ_INVENTARIO, [])
@@ -741,11 +758,16 @@ camera_y = 0
 direcao = "front"
 quadro = 0
 tempo_animacao = 0
+acao_animacao_anterior = "walk"
 
 estamina = 100.0
 ESTAMINA_MAXIMA = 100.0
 DRENAGEM_ESTAMINA = 25.0
 RECUPERACAO_ESTAMINA = 15.0
+
+# Impede que a corrida fique ligando e desligando quando a estamina zera.
+corrida_bloqueada = False
+PERCENTUAL_RETORNO_CORRIDA = 0.25
 
 editor_colisoes = False
 editor_portas = False
@@ -1126,7 +1148,6 @@ def processar_clique_combate(pos):
         posicionar_inimigo_longe()
         tela_atual = "jogo"
 
-    
     if hp_inimigo <= 0 and hp_jogador > 0:
         inimigo_ativo = False
         segunda_fase_liberada = True
@@ -1986,18 +2007,21 @@ while executando:
 
         andando = dx != 0 or dy != 0
 
-        correndo = (
+        shift_pressionado = (
             teclas[pygame.K_LSHIFT]
             or teclas[pygame.K_RSHIFT]
-        ) and andando and estamina > 0
-
-        velocidade = (
-            VELOCIDADE_CORRIDA
-            if correndo
-            else VELOCIDADE
         )
 
-        if correndo:
+        # Só tenta correr se houver estamina e a corrida não estiver bloqueada.
+        quer_correr = (
+            shift_pressionado
+            and andando
+            and estamina > 0
+            and not corrida_bloqueada
+        )
+
+        # Consome estamina uma única vez por quadro.
+        if quer_correr:
             estamina -= DRENAGEM_ESTAMINA * dt
         else:
             estamina += RECUPERACAO_ESTAMINA * dt
@@ -2005,6 +2029,25 @@ while executando:
         estamina = max(
             0,
             min(ESTAMINA_MAXIMA, estamina)
+        )
+
+        # Ao chegar a zero, bloqueia a corrida até recuperar 25% da barra.
+        if estamina <= 0:
+            corrida_bloqueada = True
+        elif estamina >= ESTAMINA_MAXIMA * PERCENTUAL_RETORNO_CORRIDA:
+            corrida_bloqueada = False
+
+        correndo = (
+            shift_pressionado
+            and andando
+            and estamina > 0
+            and not corrida_bloqueada
+        )
+
+        velocidade = (
+            VELOCIDADE_CORRIDA
+            if correndo
+            else VELOCIDADE
         )
 
         if dx != 0 and dy != 0:
@@ -2025,6 +2068,14 @@ while executando:
 
             if not tem_colisao(player_x, novo_y):
                 player_y = novo_y
+
+        # Identifica a animação atual e reinicia ao trocar entre andar e correr.
+        acao_atual = "run" if correndo else "walk"
+
+        if acao_atual != acao_animacao_anterior:
+            quadro = 0
+            tempo_animacao = 0
+            acao_animacao_anterior = acao_atual
 
         if andando:
             intervalo = 75 if correndo else 125

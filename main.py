@@ -8,7 +8,8 @@ import math
 #obstaculos config
 FASE2_VELOCIDADE_OBSTACULO = 350
 FASE2_INTERVALO_SPAWN = 0.2
-FASE2_TAMANHO_OBSTACULO = 30
+FASE2_LARGURA_OBSTACULO = 48
+FASE2_ALTURA_OBSTACULO = 72
 
 FASE2_LARGURA_PERSONAGEM = 90
 FASE2_ALTURA_PERSONAGEM = 110
@@ -81,6 +82,20 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
 
     mapa = pygame.image.load(caminho_mapa).convert()
     mapa = pygame.transform.scale(mapa, (LARGURA, ALTURA))
+
+    # Imagem dos obstaculos que caem na fase 2
+    obstaculo_sprite = carregar_imagem_fase2(
+        pasta_assets,
+        "meteoro.jpeg",
+        (FASE2_LARGURA_OBSTACULO, FASE2_ALTURA_OBSTACULO)
+    )
+
+    if obstaculo_sprite is None:
+        raise FileNotFoundError(
+            "Nao encontrei assets/meteoro.jpeg. "
+            "Coloque a imagem meteoro.jpeg dentro da pasta assets."
+        )
+
     animacoes = {}
 
     for direcao in ("front", "back", "left", "right"):
@@ -257,14 +272,14 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
 
             x = random.randint(
                 0,
-                LARGURA - FASE2_TAMANHO_OBSTACULO
+                LARGURA - FASE2_LARGURA_OBSTACULO
             )
 
             obstaculo = pygame.Rect(
                 x,
-                -FASE2_TAMANHO_OBSTACULO,
-                FASE2_TAMANHO_OBSTACULO,
-                FASE2_TAMANHO_OBSTACULO
+                -FASE2_ALTURA_OBSTACULO,
+                FASE2_LARGURA_OBSTACULO,
+                FASE2_ALTURA_OBSTACULO
             )
 
             obstaculos.append(obstaculo)
@@ -281,11 +296,7 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
         TELA.blit(mapa, (0, 0))
 
         for obstaculo in obstaculos:
-            pygame.draw.rect(
-                TELA,
-                (255, 0, 0),
-                obstaculo
-            )
+            TELA.blit(obstaculo_sprite, obstaculo.topleft)
 
         TELA.blit(sprite, jogador.topleft)
 
@@ -446,6 +457,7 @@ def encontrar_mapa():
         "menu.jpeg",
         "combate.jpeg",
         "personagem.png",
+        "meteoro.jpeg"
     }
 
     if not os.path.isdir(ASSETS):

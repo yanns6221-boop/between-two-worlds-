@@ -7,10 +7,10 @@ import random
 import math
 
 # Configuracoes dos meteoros da fase 2
-FASE2_VELOCIDADE_OBSTACULO = 350
-FASE2_INTERVALO_SPAWN = 0.2
-FASE2_TAMANHO_OBSTACULO = 46
-FASE2_TAMANHO_METEORO = 70
+FASE2_VELOCIDADE_OBSTACULO = 300
+FASE2_INTERVALO_SPAWN = 0.7
+FASE2_TAMANHO_OBSTACULO = 40
+FASE2_TAMANHO_METEORO = 50
 
 FASE2_LARGURA_PERSONAGEM = 90
 FASE2_ALTURA_PERSONAGEM = 110
@@ -221,7 +221,6 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
         for obstaculo in obstaculos[:]:
             obstaculo.y += int(FASE2_VELOCIDADE_OBSTACULO * dt)
 
-            # Hitbox menor que o desenho do meteoro.
             hitbox_obstaculo = obstaculo.inflate(-22, -30)
             if jogador.colliderect(hitbox_obstaculo):
                 morreu = True
@@ -259,7 +258,7 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
         pygame.time.delay(3000)
         return True
 
-    # Sair com ESC nao conta como vitoria.
+    # Sair com ESC nao conta como vitoria
     return False
 
 
@@ -280,7 +279,7 @@ HITBOX_ALTURA = 25
 PASTA = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(PASTA, "assets")
 
-# Arquivos de video e audio salvos na pasta assets.
+
 CAMINHO_VIDEO_INTRO = os.path.join(ASSETS, "VideoIntrodução.mp4")
 CAMINHO_AUDIO_ABERTURA = os.path.join(ASSETS, "audio_abertura.wav")
 CAMINHO_VIDEO_FINAL = os.path.join(ASSETS, "VideoFinal.mp4")
@@ -745,7 +744,7 @@ ESTAMINA_MAXIMA = 100.0
 DRENAGEM_ESTAMINA = 25.0
 RECUPERACAO_ESTAMINA = 15.0
 
-# Bloqueia a corrida quando a estamina zera ate recuperar 25%.
+
 corrida_bloqueada = False
 PERCENTUAL_RETORNO_CORRIDA = 0.25
 
@@ -1696,6 +1695,7 @@ while executando:
             continue
 
         if tela_atual == "menu":
+        
             if evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1:
                 mouse = evento.pos
 
@@ -2269,6 +2269,13 @@ while executando:
             (240, 230, 200),
             FONTE_PEQUENA
         )
+    fonte_dica = pygame.font.SysFont(None, 24)
+    texto_dica = fonte_dica.render(
+        "Dica: achando a ordem correta das estatuas vc pode escutar algo diferente!",
+        True,
+        (255, 255, 255)
+        )
+    TELA.blit(texto_dica, (20, 80))
 
     pygame.display.flip()
 

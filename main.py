@@ -6,10 +6,11 @@ import json
 import random
 import math
 
-#obstaculos config
+# Configuracoes dos meteoros da fase 2
 FASE2_VELOCIDADE_OBSTACULO = 350
 FASE2_INTERVALO_SPAWN = 0.2
-FASE2_TAMANHO_OBSTACULO = 30
+FASE2_TAMANHO_OBSTACULO = 46
+FASE2_TAMANHO_METEORO = 70
 
 FASE2_LARGURA_PERSONAGEM = 90
 FASE2_ALTURA_PERSONAGEM = 110
@@ -19,16 +20,13 @@ FASE2_VELOCIDADE_CORRIDA = 250
 
 
 def carregar_imagem_fase2(pasta_assets, nome, tamanho=None):
-    caminho = os.path.join(pasta_assets, nome)
+    caminho_arquivo = os.path.join(pasta_assets, nome)
 
     try:
-        imagem = pygame.image.load(caminho).convert_alpha()
-
+        imagem = pygame.image.load(caminho_arquivo).convert_alpha()
         if tamanho:
             imagem = pygame.transform.scale(imagem, tamanho)
-
         return imagem
-
     except (pygame.error, FileNotFoundError):
         return None
 
@@ -38,14 +36,16 @@ def carregar_animacao_fase2(pasta_assets, direcao, acao):
 
     for numero in range(1, 7):
         nome = f"{direcao}_{acao}_{numero}.png"
-        caminho = os.path.join(pasta_assets, nome)
+        caminho_arquivo = os.path.join(pasta_assets, nome)
 
         try:
-            imagem = pygame.image.load(caminho).convert_alpha()
+            imagem = pygame.image.load(caminho_arquivo).convert_alpha()
         except (pygame.error, FileNotFoundError):
             continue
 
         largura_original, altura_original = imagem.get_size()
+        if largura_original <= 0 or altura_original <= 0:
+            continue
 
         escala = min(
             FASE2_LARGURA_PERSONAGEM / largura_original,
@@ -54,20 +54,14 @@ def carregar_animacao_fase2(pasta_assets, direcao, acao):
 
         nova_largura = max(1, round(largura_original * escala))
         nova_altura = max(1, round(altura_original * escala))
-
-        imagem = pygame.transform.scale(
-            imagem,
-            (nova_largura, nova_altura)
-        )
+        imagem = pygame.transform.scale(imagem, (nova_largura, nova_altura))
 
         quadro = pygame.Surface(
             (FASE2_LARGURA_PERSONAGEM, FASE2_ALTURA_PERSONAGEM),
             pygame.SRCALPHA
         )
-
         pos_x = (FASE2_LARGURA_PERSONAGEM - nova_largura) // 2
         pos_y = FASE2_ALTURA_PERSONAGEM - nova_altura
-
         quadro.blit(imagem, (pos_x, pos_y))
         frames.append(quadro)
 
@@ -75,275 +69,199 @@ def carregar_animacao_fase2(pasta_assets, direcao, acao):
 
 
 def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
-
     pasta = os.path.dirname(os.path.abspath(__file__))
     pasta_assets = os.path.join(pasta, "assets")
     caminho_mapa = os.path.join(pasta, "mapa_2.jpeg")
 
-    mapa = pygame.image.load(caminho_mapa).convert()
+    try:
+        mapa = pygame.image.load(caminho_mapa).convert()
+    except (pygame.error, FileNotFoundError):
+        raise FileNotFoundError("Nao encontrei o arquivo mapa_2.jpeg na pasta principal.")
+
     mapa = pygame.transform.scale(mapa, (LARGURA, ALTURA))
-    animacoes = {}
+    animacoes_fase2 = {}
 
-    for direcao in ("front", "back", "left", "right"):
-
-        animacoes[(direcao, "walk")] = carregar_animacao_fase2(
-            pasta_assets, direcao, "walk"
+    for direcao_animacao in ("front", "back", "left", "right"):
+        animacoes_fase2[(direcao_animacao, "walk")] = carregar_animacao_fase2(
+            pasta_assets, direcao_animacao, "walk"
+        )
+        animacoes_fase2[(direcao_animacao, "run")] = carregar_animacao_fase2(
+            pasta_assets, direcao_animacao, "run"
         )
 
-        animacoes[(direcao, "run")] = carregar_animacao_fase2(
-            pasta_assets, direcao, "run"
-        )
-
-    player_frente = carregar_imagem_fase2(
-        pasta_assets,
-        "player.png",
+    player_frente_fase2 = carregar_imagem_fase2(
+        pasta_assets, "player.png",
         (FASE2_LARGURA_PERSONAGEM, FASE2_ALTURA_PERSONAGEM)
     )
-
-    player_costas = carregar_imagem_fase2(
-        pasta_assets,
-        "player_back.png",
+    player_costas_fase2 = carregar_imagem_fase2(
+        pasta_assets, "player_back.png",
         (FASE2_LARGURA_PERSONAGEM, FASE2_ALTURA_PERSONAGEM)
     )
+    meteoro_sprite = carregar_imagem_fase2(
+        pasta_assets, "meteoro.png",
+        (FASE2_TAMANHO_METEORO, FASE2_TAMANHO_METEORO)
+    )
 
-    if player_frente is None:
-        raise FileNotFoundError("Não encontrei assets/player.png")
+    if player_frente_fase2 is None:
+        raise FileNotFoundError("Nao encontrei assets/player.png")
+    if player_costas_fase2 is None:
+        player_costas_fase2 = player_frente_fase2
+    if meteoro_sprite is None:
+        raise FileNotFoundError("Nao encontrei assets/meteoro.png")
 
-    if player_costas is None:
-        player_costas = player_frente
-
-    def imagem_personagem(direcao, correndo, andando, quadro):
-
+    def imagem_personagem_fase2(direcao, correndo, andando, quadro):
         acao = "run" if correndo else "walk"
-
-        frames = animacoes.get((direcao, acao), [])
+        frames = animacoes_fase2.get((direcao, acao), [])
 
         if not frames and correndo:
-            frames = animacoes.get((direcao, "walk"), [])
+            frames = animacoes_fase2.get((direcao, "walk"), [])
 
         if andando and frames:
             return frames[quadro % len(frames)]
-
         if direcao == "back":
-            return player_costas
-
+            return player_costas_fase2
         if direcao == "front":
-            return player_frente
-
+            return player_frente_fase2
         if frames:
             return frames[0]
-
-        return player_frente
+        return player_frente_fase2
 
     jogador_x = float((LARGURA - FASE2_LARGURA_PERSONAGEM) // 2)
-    jogador_y = float(250)
-
+    jogador_y = 250.0
     jogador = pygame.Rect(
-        int(jogador_x),
-        int(jogador_y),
-        FASE2_LARGURA_PERSONAGEM,
-        FASE2_ALTURA_PERSONAGEM
+        int(jogador_x), int(jogador_y),
+        FASE2_LARGURA_PERSONAGEM, FASE2_ALTURA_PERSONAGEM
     )
 
     direcao = "front"
     quadro = 0
     tempo_animacao = 0
+    acao_animacao_anterior = "walk"
 
     executando_fase = True
-
-    #coisas pa disviar
     obstaculos = []
     tempo_spawn = 0
     morreu = False
-
     tempo_sobrevivencia = 0
     TEMPO_LIMITE = 60
-    venceu = False
-
-    
 
     while executando_fase and not morreu:
-
         dt = min(RELOGIO.tick(60) / 1000, 0.05)
         tempo_sobrevivencia += dt
+        tempo_animacao += dt * 1000
+
         if tempo_sobrevivencia >= TEMPO_LIMITE:
             executando_fase = False
-            venceu = True
-
-        tempo_animacao += dt * 1000
 
         andando = False
         correndo = False
 
-        
         for evento in pygame.event.get():
-
             if evento.type == pygame.QUIT:
                 return None
-
-            if evento.type == pygame.KEYDOWN:
-
-                if evento.key == pygame.K_ESCAPE:
-                    executando_fase = False
+            if evento.type == pygame.KEYDOWN and evento.key == pygame.K_ESCAPE:
+                executando_fase = False
 
         teclas = pygame.key.get_pressed()
-
         dx = 0
         dy = 0
 
-        # movi
         if teclas[pygame.K_a] or teclas[pygame.K_LEFT]:
             dx -= 1
             direcao = "left"
-
         if teclas[pygame.K_d] or teclas[pygame.K_RIGHT]:
             dx += 1
             direcao = "right"
 
         andando = dx != 0 or dy != 0
-
         correndo = (
-            teclas[pygame.K_LSHIFT]
-            or teclas[pygame.K_RSHIFT]
+            teclas[pygame.K_LSHIFT] or teclas[pygame.K_RSHIFT]
         ) and andando
 
-        velocidade = (
-            FASE2_VELOCIDADE_CORRIDA
-            if correndo
-            else FASE2_VELOCIDADE
-        )
+        velocidade = FASE2_VELOCIDADE_CORRIDA if correndo else FASE2_VELOCIDADE
 
-        # pa n dar bug
         if dx != 0 and dy != 0:
             dx *= 0.7071
             dy *= 0.7071
 
         jogador_x += dx * velocidade * dt
         jogador_y += dy * velocidade * dt
-
         jogador.x = round(jogador_x)
         jogador.y = round(jogador_y)
-
-        
-        jogador.clamp_ip(
-            pygame.Rect(0, 0, LARGURA, ALTURA)
-        )
-
+        jogador.clamp_ip(pygame.Rect(0, 0, LARGURA, ALTURA))
         jogador_x = float(jogador.x)
         jogador_y = float(jogador.y)
 
+        acao_atual = "run" if correndo else "walk"
+        if acao_atual != acao_animacao_anterior:
+            quadro = 0
+            tempo_animacao = 0
+            acao_animacao_anterior = acao_atual
+
         if andando:
-
             intervalo = 75 if correndo else 125
-
             if tempo_animacao >= intervalo:
                 quadro += 1
                 tempo_animacao = 0
-
         else:
             quadro = 0
             tempo_animacao = 0
 
-        sprite = imagem_personagem(
-            direcao,
-            correndo,
-            andando,
-            quadro
-        )
-
+        sprite = imagem_personagem_fase2(direcao, correndo, andando, quadro)
 
         tempo_spawn += dt
-
         if tempo_spawn >= FASE2_INTERVALO_SPAWN:
-
             tempo_spawn = 0
+            x = random.randint(0, LARGURA - FASE2_TAMANHO_OBSTACULO)
+            obstaculos.append(pygame.Rect(
+                x, -FASE2_TAMANHO_OBSTACULO,
+                FASE2_TAMANHO_OBSTACULO, FASE2_TAMANHO_OBSTACULO
+            ))
 
-            x = random.randint(
-                0,
-                LARGURA - FASE2_TAMANHO_OBSTACULO
-            )
-
-            obstaculo = pygame.Rect(
-                x,
-                -FASE2_TAMANHO_OBSTACULO,
-                FASE2_TAMANHO_OBSTACULO,
-                FASE2_TAMANHO_OBSTACULO
-            )
-
-            obstaculos.append(obstaculo)
-
-        
         for obstaculo in obstaculos[:]:
             obstaculo.y += int(FASE2_VELOCIDADE_OBSTACULO * dt)
-            hitbox_obstaculo = obstaculo.inflate(-5, -5)
+
+            # Hitbox menor que o desenho do meteoro.
+            hitbox_obstaculo = obstaculo.inflate(-22, -30)
             if jogador.colliderect(hitbox_obstaculo):
                 morreu = True
+
             if obstaculo.top > ALTURA:
                 obstaculos.remove(obstaculo)
 
         TELA.blit(mapa, (0, 0))
 
         for obstaculo in obstaculos:
-            pygame.draw.rect(
-                TELA,
-                (255, 0, 0),
-                obstaculo
-            )
+            pos_meteoro = meteoro_sprite.get_rect(center=obstaculo.center)
+            TELA.blit(meteoro_sprite, pos_meteoro)
 
         TELA.blit(sprite, jogador.topleft)
-
         pygame.display.flip()
 
-    
     if morreu:
-
         fonte = pygame.font.Font(None, 70)
-
-        texto = fonte.render(
-            "VOCE MORREU!",
-            True,
-            (255, 0, 0)
-        )
-
+        texto = fonte.render("VOCE MORREU!", True, (255, 0, 0))
         TELA.fill((0, 0, 0))
-
-        TELA.blit(
-            texto,
-            (
-                LARGURA // 2 - texto.get_width() // 2,
-                ALTURA // 2 - texto.get_height() // 2
-            )
-        )
-
+        TELA.blit(texto, texto.get_rect(center=(LARGURA // 2, ALTURA // 2)))
         pygame.display.flip()
         pygame.time.delay(2000)
+        return False
 
-    elif tempo_sobrevivencia >= TEMPO_LIMITE:
-
-        fonte = pygame.font.Font(None, 70)
-
+    if tempo_sobrevivencia >= TEMPO_LIMITE:
+        fonte = pygame.font.Font(None, 54)
         texto = fonte.render(
-            "o jogo acabou obrigado por jogar!",
-            True,
-            (255, 255, 255)
+            "O jogo acabou! Obrigado por jogar!",
+            True, (255, 255, 255)
         )
-
         TELA.fill((0, 0, 0))
-
-        TELA.blit(
-            texto,
-            (
-                LARGURA // 2 - texto.get_width() // 2,
-                ALTURA // 2 - texto.get_height() // 2
-            )
-        )
-
+        TELA.blit(texto, texto.get_rect(center=(LARGURA // 2, ALTURA // 2)))
         pygame.display.flip()
         pygame.time.delay(3000)
         return True
 
-    # ESC ou outra interrupcao antes dos 60 segundos nao conta como vitoria.
+    # Sair com ESC nao conta como vitoria.
     return False
+
 
 pygame.init()
 
@@ -449,7 +367,7 @@ def reproduzir_video(caminho_video, caminho_audio=None):
             canal_audio.stop()
 
 # MENU 
-CAMINHO_MENU = os.path.join(ASSETS, "menu.jpeg")
+CAMINHO_MENU = os.path.join(ASSETS, "menu.png")
 MENU = pygame.image.load(CAMINHO_MENU).convert()
 MENU = pygame.transform.scale(MENU, (LARGURA, ALTURA))
 
@@ -531,11 +449,11 @@ def encontrar_mapa():
         "left_run.png",
         "right_walk.png",
         "right_run.png",
-        "menu.jpeg",
+        "menu.png",
         "combate.jpeg",
         "personagem.png",
         "goblin.png",
-        "meteoro.jpeg",
+        "meteoro.png",
 
     }
 
@@ -826,6 +744,10 @@ estamina = 100.0
 ESTAMINA_MAXIMA = 100.0
 DRENAGEM_ESTAMINA = 25.0
 RECUPERACAO_ESTAMINA = 15.0
+
+# Bloqueia a corrida quando a estamina zera ate recuperar 25%.
+corrida_bloqueada = False
+PERCENTUAL_RETORNO_CORRIDA = 0.25
 
 editor_colisoes = False
 editor_portas = False
@@ -2111,26 +2033,41 @@ while executando:
 
         andando = dx != 0 or dy != 0
 
-        correndo = (
+        shift_pressionado = (
             teclas[pygame.K_LSHIFT]
             or teclas[pygame.K_RSHIFT]
-        ) and andando and estamina > 0
-
-        velocidade = (
-            VELOCIDADE_CORRIDA
-            if correndo
-            else VELOCIDADE
         )
 
-        if correndo:
+        # So tenta correr se houver estamina e a corrida nao estiver bloqueada.
+        quer_correr = (
+            shift_pressionado
+            and andando
+            and estamina > 0
+            and not corrida_bloqueada
+        )
+
+        # Consome estamina uma unica vez por quadro.
+        if quer_correr:
             estamina -= DRENAGEM_ESTAMINA * dt
         else:
             estamina += RECUPERACAO_ESTAMINA * dt
 
-        estamina = max(
-            0,
-            min(ESTAMINA_MAXIMA, estamina)
+        estamina = max(0, min(ESTAMINA_MAXIMA, estamina))
+
+        # Ao chegar a zero, so libera a corrida depois de recuperar 25%.
+        if estamina <= 0:
+            corrida_bloqueada = True
+        elif estamina >= ESTAMINA_MAXIMA * PERCENTUAL_RETORNO_CORRIDA:
+            corrida_bloqueada = False
+
+        correndo = (
+            shift_pressionado
+            and andando
+            and estamina > 0
+            and not corrida_bloqueada
         )
+
+        velocidade = VELOCIDADE_CORRIDA if correndo else VELOCIDADE
 
         if dx != 0 and dy != 0:
             dx *= 0.7071

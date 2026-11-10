@@ -174,9 +174,7 @@ def executar_fase2(TELA, RELOGIO, LARGURA, ALTURA):
             direcao = "right"
 
         andando = dx != 0 or dy != 0
-        correndo = (
-            teclas[pygame.K_LSHIFT] or teclas[pygame.K_RSHIFT]
-        ) and andando
+        
 
         velocidade = FASE2_VELOCIDADE_CORRIDA if correndo else FASE2_VELOCIDADE
 
@@ -760,7 +758,7 @@ item_selecionado = 0
 TAMANHO_INIMIGO = 28
 VELOCIDADE_INIMIGO = 2.0
 ALCANCE_PERSEGUICAO = 300
-DISTANCIA_SPAWN_INIMIGO = 300
+DISTANCIA_SPAWN_INIMIGO = 1500
 inimigo = pygame.Rect(
     0, 0,
     TAMANHO_INIMIGO,
@@ -2038,7 +2036,7 @@ while executando:
             or teclas[pygame.K_RSHIFT]
         )
 
-        # So tenta correr se houver estamina e a corrida nao estiver bloqueada.
+
         quer_correr = (
             shift_pressionado
             and andando
@@ -2046,7 +2044,6 @@ while executando:
             and not corrida_bloqueada
         )
 
-        # Consome estamina uma unica vez por quadro.
         if quer_correr:
             estamina -= DRENAGEM_ESTAMINA * dt
         else:
@@ -2054,7 +2051,7 @@ while executando:
 
         estamina = max(0, min(ESTAMINA_MAXIMA, estamina))
 
-        # Ao chegar a zero, so libera a corrida depois de recuperar 25%.
+        # Se chegar em 0 so corre com 25%
         if estamina <= 0:
             corrida_bloqueada = True
         elif estamina >= ESTAMINA_MAXIMA * PERCENTUAL_RETORNO_CORRIDA:
@@ -2275,7 +2272,7 @@ while executando:
         True,
         (255, 255, 255)
         )
-    TELA.blit(texto_dica, (20, 80))
+    TELA.blit(texto_dica, (20, 70))
 
     pygame.display.flip()
 
